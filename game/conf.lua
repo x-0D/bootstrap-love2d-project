@@ -1,3 +1,7 @@
+package.path = package.path .. ";libs/?.lua"
+package.path = package.path .. ";libs/?/init.lua"
+package.cpath = package.cpath .. ";libs/?.so"
+
 local IS_DEBUG = os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" and arg[2] == "debug"
 if IS_DEBUG then
   require("lldebugger").start()
@@ -37,8 +41,8 @@ function love.conf(t)
 
   t.window.title          = product_config["PRODUCT_NAME"]
   t.window.icon           = nil
-  t.window.width          = 1920
-  t.window.height         = 1080
+  t.window.width          = 800
+  t.window.height         = 600
   t.window.borderless     = false
   t.window.resizable      = false
   t.window.minwidth       = 1

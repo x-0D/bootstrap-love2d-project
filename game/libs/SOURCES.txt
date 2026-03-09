@@ -1,0 +1,5 @@
+cute.lua=https://raw.githubusercontent.com/gtrogers/Cute/79db33b9af95310a28d3f93e35043d1c1fae0fbb/cute.lua
+concord=https://github.com/Keyslam-Group/Concord/tree/848652f68887db0c4261efe499facbec88959d03
+flexlove=https://github.com/mikefreno/FlexLove/releases/download/v0.10.3/flexlove-full-v0.10.3.zip
+json.lua=https://raw.githubusercontent.com/rxi/json.lua/11077824d7cfcd28a4b2f152518036b295e7e4ce/json.lua
+roomy.lua=https://raw.githubusercontent.com/tesselode/roomy/523e59d16d9c6369d14f5c41ddd4c73d30264104/roomy.lua
