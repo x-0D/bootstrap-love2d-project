@@ -19,6 +19,10 @@ here are deepwiki links for the libraries:
 - [Cute](https://deepwiki.com/gtrogers/Cute)
 - [Json.lua](https://deepwiki.com/rxi/json.lua)
 
+Learn your previous relevant lessons first, before asking deepwiki.
+
 Every time you asking deepwiki about something, you MUST write down knowledge you got into docs/my_lessons folder.
+ALWAYS ADD task into todo list about writing docs/my_lessons about the knowledge you got.
+When you asking deepwiki, you MUST provide some context about the topic, like source code or examples. as example, if you're asking deepwiki on FlexLove about integration with roomy.lua, you need provide code and context about how roomy.lua works, and how you can use roomy.lua to create a scene.
 Every time you sucessfully complete the task, you MUST write down the insghts into docs/my_lessons folder.
 Task will be completed only when user says "task completed".
