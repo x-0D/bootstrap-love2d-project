@@ -3,6 +3,7 @@ local overlayStats = require("libs.overlayStats")
 manager = require('roomy').new()
 mainMenu = require("scenes.main_menu_screen")
 gameplay = require("scenes.gameplay_screen")
+modsManagerScreen = require("scenes.mods_manager_screen")
 credits = require("scenes.credits_screen")
 settings = require("scenes.settings_screen")
 
@@ -22,9 +23,5 @@ function love.update(dt)
 end
 
 function love.keypressed(key)
-  if key == "escape" and love.system.getOS() ~= "Web" then
-    love.event.quit()
-  else
-    overlayStats.handleKeyboard(key)
-  end
+  overlayStats.handleKeyboard(key)
 end
