@@ -80,12 +80,6 @@ end
 function gameplay:keyreleased(key)
   if self.pressedKeys[key] then
     self.pressedKeys[key] = nil
-    if key == "escape" then
-      local menu = modSystem.getScene("main_menu")
-      if menu then
-        manager:enter(menu)
-      end
-    end
   end
 end
 

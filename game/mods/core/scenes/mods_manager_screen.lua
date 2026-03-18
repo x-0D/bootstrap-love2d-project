@@ -617,17 +617,6 @@ end
 function modsManagerScene:keyreleased(key)
   if self.pressedKeys[key] then
     self.pressedKeys[key] = nil
-    if key == "return" or key == "space" then
-      if self.isConfirming then
-        if self.modalIndex == 1 then
-          self:confirmAction()
-        else
-          self:cancelAction()
-        end
-      -- Note: Actions are already handled in keypressed for immediate response
-      -- but we can keep it here if we want release-based actions
-      end
-    end
   end
 end
 
