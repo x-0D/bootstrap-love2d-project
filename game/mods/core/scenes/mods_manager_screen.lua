@@ -1,6 +1,5 @@
 local FlexLove = require("libs.FlexLove")
 local Color = FlexLove.Color
-local modSystem = require("mods")
 
 local modsManagerScene = {
   selectedIndex = 1,
@@ -249,7 +248,10 @@ function modsManagerScene:createUI()
         self.selectedIndex = "back"
         self:updateButtonStates()
       elseif event.type == "release" then
-        manager:enter(mainMenu)
+        local menu = modSystem.getScene("main_menu")
+        if menu then
+          manager:enter(menu)
+        end
       end
     end
   })
@@ -596,10 +598,16 @@ function modsManagerScene:keypressed(key)
       elseif self.selectedIndex == "unload" then
         self:unloadMod()
       elseif self.selectedIndex == "back" then
-        manager:enter(mainMenu)
+        local menu = modSystem.getScene("main_menu")
+        if menu then
+          manager:enter(menu)
+        end
       end
     elseif key == "escape" then
-      manager:enter(mainMenu)
+      local menu = modSystem.getScene("main_menu")
+      if menu then
+        manager:enter(menu)
+      end
     end
 
     self:updateButtonStates()

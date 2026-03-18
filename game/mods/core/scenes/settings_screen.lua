@@ -404,7 +404,10 @@ function settingsScene:createUI()
         self.selectedIndex = #self.options + 2
         self:updateButtonStates()
       elseif event.type == "release" and not self.isConfirming then
-        manager:enter(mainMenu)
+        local menu = modSystem.getScene("main_menu")
+        if menu then
+          manager:enter(menu)
+        end
       end
     end
   })
@@ -579,10 +582,16 @@ function settingsScene:keypressed(key)
       if self.selectedIndex == #self.options + 1 then
         self:applySettings()
       elseif self.selectedIndex == #self.options + 2 then
-        manager:enter(mainMenu)
+        local menu = modSystem.getScene("main_menu")
+        if menu then
+          manager:enter(menu)
+        end
       end
     elseif key == "escape" then
-      manager:enter(mainMenu)
+      local menu = modSystem.getScene("main_menu")
+      if menu then
+        manager:enter(menu)
+      end
     end
 
     self:updateButtonStates()
@@ -602,10 +611,16 @@ function settingsScene:keyreleased(key)
       elseif self.selectedIndex == #self.options + 1 then
         self:applySettings()
       elseif self.selectedIndex == #self.options + 2 then
-        manager:enter(mainMenu)
+        local menu = modSystem.getScene("main_menu")
+        if menu then
+          manager:enter(menu)
+        end
       end
     elseif key == "escape" then
-      manager:enter(mainMenu)
+      local menu = modSystem.getScene("main_menu")
+      if menu then
+        manager:enter(menu)
+      end
     end
   end
 end

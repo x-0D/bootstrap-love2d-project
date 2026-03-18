@@ -1,27 +1,48 @@
 local cute = require("cute")
 local overlayStats = require("libs.overlayStats")
+
+-- Make systems globally accessible
+modSystem = require("libs.mods")
 manager = require('roomy').new()
-mainMenu = require("scenes.main_menu_screen")
-gameplay = require("scenes.gameplay_screen")
-modsManagerScreen = require("scenes.mods_manager_screen")
-credits = require("scenes.credits_screen")
-settings = require("scenes.settings_screen")
 
 function love.load(args)
   cute.go(args)
+
+  -- Initialize mod system (loads core and other mods)
+  modSystem.initialize()
+
+  -- Hook roomy manager
   manager:hook()
-  manager:enter(mainMenu)
+
+  -- Start with the main menu from core
+  local mainMenu = modSystem.getScene("main_menu")
+  if mainMenu then
+    manager:enter(mainMenu)
+  else
+    error("Core main_menu scene not found!")
+  end
+
   overlayStats.load()
 end
 
-function love.draw(dt)
+function love.draw()
+  if modSystem.globalWorld then
+    modSystem.globalWorld:emit("draw")
+  end
   overlayStats.draw()
 end
 
 function love.update(dt)
+  -- Update global ECS world if needed
+  if modSystem.globalWorld then
+    modSystem.globalWorld:emit("update", dt)
+  end
   overlayStats.update(dt)
 end
 
 function love.keypressed(key)
+  if modSystem.globalWorld then
+    modSystem.globalWorld:emit("keypressed", key)
+  end
   overlayStats.handleKeyboard(key)
 end

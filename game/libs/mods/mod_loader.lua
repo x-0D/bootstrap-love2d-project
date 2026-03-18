@@ -27,7 +27,7 @@ function modLoader.scanMods()
       local manifestPath = modPath .. "/modinfo.lua"
       if isFile(manifestPath) then
         local success, modInfo = pcall(function()
-          return dofile(manifestPath)
+          return love.filesystem.load(manifestPath)()
         end)
 
         if success and modInfo then
@@ -43,13 +43,14 @@ end
 function modLoader.loadMod(modName)
   local modInfo = modLoader.mods[modName]
   if not modInfo then return nil end
+  if modInfo.loaded then return modInfo.module end
 
   local initPath = modInfo.path .. "/init.lua"
   if not isFile(initPath) then return nil end
 
-  local success, modModule = pcall(function()
-    return dofile(initPath)
-  end)
+  -- Use require for init.lua to handle modules correctly
+  local requirePath = modInfo.path:gsub("/", ".") .. ".init"
+  local success, modModule = pcall(require, requirePath)
 
   if success then
     modInfo.module = modModule
@@ -57,6 +58,7 @@ function modLoader.loadMod(modName)
     return modModule
   end
 
+  print(string.format("[ModLoader] Error loading mod '%s': %s", modName, modModule))
   return nil
 end
 

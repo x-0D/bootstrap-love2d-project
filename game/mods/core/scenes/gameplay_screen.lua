@@ -1,5 +1,4 @@
 local concord = require("libs.concord")
-local modSystem = require("libs.mods")
 
 local gameplay = {
   pressedKeys = {},
@@ -10,28 +9,24 @@ function gameplay:enter(previous, ...)
   print("Entering gameplay scene")
   self.pressedKeys = {}
 
-  -- Create Concord World
+  -- Create Concord World (local world for gameplay)
   self.world = concord.world()
 
-  modSystem.initialize()
-
-  -- Load and initialize enabled mods
+  -- Load and initialize enabled mods (already initialized in main.lua)
   local mods = modSystem.getMods()
   self.loadedMods = {}
   for name, info in pairs(mods) do
     if info.enabled then
       local modModule = modSystem.loadMod(name)
       if modModule then
-        _G[name] = modModule
         table.insert(self.loadedMods, name)
         if modModule.main then
-          print(string.format("[Gameplay] Initializing mod '%s'...", name))
+          print(string.format("[Gameplay] Initializing mod '%s' for scene...", name))
           modModule.main(self.world)
         end
       end
     end
   end
-
 end
 
 function gameplay:leave(next, ...)
@@ -74,7 +69,10 @@ function gameplay:keypressed(key)
   if not self.pressedKeys[key] then
     self.pressedKeys[key] = true
     if key == "escape" then
-      manager:enter(mainMenu)
+      local menu = modSystem.getScene("main_menu")
+      if menu then
+        manager:enter(menu)
+      end
     end
   end
 end
@@ -83,7 +81,10 @@ function gameplay:keyreleased(key)
   if self.pressedKeys[key] then
     self.pressedKeys[key] = nil
     if key == "escape" then
-      manager:enter(mainMenu)
+      local menu = modSystem.getScene("main_menu")
+      if menu then
+        manager:enter(menu)
+      end
     end
   end
 end

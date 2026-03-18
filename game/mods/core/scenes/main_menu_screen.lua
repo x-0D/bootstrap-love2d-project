@@ -1,29 +1,25 @@
 local FlexLove = require("libs.FlexLove")
 local Color = FlexLove.Color
 
--- Menu visual constants
-local COLORS = {
-  NORMAL = Color.new(0.8, 0.9, 1, 1),
-  HOVER = Color.new(1, 1, 1, 1),
-  PRESSED = Color.new(0.6, 0.7, 0.8, 1)
-}
-
 local mainMenu = {
   menuButtons = {},
   selectedIndex = 1,
   isPressed = false,
-  pressedKeys = {}
+  pressedKeys = {},
+  -- Menu visual constants
+  COLORS = {
+    NORMAL = Color.new(0.8, 0.9, 1, 1),
+    HOVER = Color.new(1, 1, 1, 1),
+    PRESSED = Color.new(0.6, 0.7, 0.8, 1)
+  },
+  menuOptions = {
+    { label = "Start Game", action = "start" },
+    { label = "Mods Manager", action = "mods" },
+    { label = "Credits", action = "credits" },
+    { label = "Settings", action = "settings" },
+    { label = "Quit", action = "quit" }
+  }
 }
-
-local menuOptions = {
-  { label = "Start Game", action = "start" },
-  { label = "Mods Manager", action = "mods" },
-  { label = "Credits", action = "credits" },
-  { label = "Settings", action = "settings" },
-  { label = "Quit", action = "quit" }
-}
-
-local rootElement = nil
 
 function mainMenu:updateButtonStates()
   if not self.menuButtons then return end
@@ -40,7 +36,7 @@ function mainMenu:updateButtonStates()
       end
 
       -- Manually update text color for keyboard selection
-      button.textColor = self.isPressed and COLORS.PRESSED or COLORS.HOVER
+      button.textColor = self.isPressed and self.COLORS.PRESSED or self.COLORS.HOVER
       button._hovered = true
     else
       -- Check if mouse is hovering this button
@@ -54,13 +50,13 @@ function mainMenu:updateButtonStates()
         end
 
         -- Reset to normal text color
-        button.textColor = COLORS.NORMAL
+        button.textColor = self.COLORS.NORMAL
         button._hovered = false
       else
         -- Mouse is hovering but it's not the selectedIndex
         -- (This happens if user moves mouse after using keyboard)
         -- The onEvent handler will eventually sync self.selectedIndex = i
-        button.textColor = button._eventHandler:isAnyButtonPressed() and COLORS.PRESSED or COLORS.HOVER
+        button.textColor = button._eventHandler:isAnyButtonPressed() and self.COLORS.PRESSED or self.COLORS.HOVER
       end
     end
   end
@@ -79,7 +75,7 @@ function mainMenu:enter()
   })
 
   -- Create elements ONCE here for retained mode
-  rootElement = FlexLove.new({
+  self.rootElement = FlexLove.new({
     width = "100%",
     height = "100%",
     backgroundColor = Color.new(0.05, 0.05, 0.08, 1),
@@ -91,7 +87,7 @@ function mainMenu:enter()
   })
 
   local title = FlexLove.new({
-    parent = rootElement,
+    parent = self.rootElement,
     width = 600,
     height = 80,
     backgroundColor = Color.new(0.15, 0.15, 0.25, 1),
@@ -104,7 +100,7 @@ function mainMenu:enter()
   })
 
   local menuContainer = FlexLove.new({
-    parent = rootElement,
+    parent = self.rootElement,
     width = 500,
     height = "100%",
     positioning = "flex",
@@ -113,7 +109,7 @@ function mainMenu:enter()
     padding = { vertical = 20, horizontal = 20 }
   })
 
-  for i, option in ipairs(menuOptions) do
+  for i, option in ipairs(self.menuOptions) do
     local button = FlexLove.new({
       parent = menuContainer,
       width = "90%",
@@ -122,7 +118,7 @@ function mainMenu:enter()
       themeComponent = "buttonv2",
       text = option.label,
       textSize = "xl",
-      textColor = COLORS.NORMAL,
+      textColor = self.COLORS.NORMAL,
       onEvent = function(elem, event)
         if event.type == "hover" then
           self.selectedIndex = i
@@ -145,7 +141,7 @@ end
 
 function mainMenu:leave(next, ...)
   FlexLove.destroy()
-  rootElement = nil
+  self.rootElement = nil
   self.menuButtons = nil
 end
 
@@ -160,11 +156,11 @@ function mainMenu:keypressed(key)
     if key == "up" then
       self.selectedIndex = self.selectedIndex - 1
       if self.selectedIndex < 1 then
-        self.selectedIndex = #menuOptions
+        self.selectedIndex = #self.menuOptions
       end
     elseif key == "down" then
       self.selectedIndex = self.selectedIndex + 1
-      if self.selectedIndex > #menuOptions then
+      if self.selectedIndex > #self.menuOptions then
         self.selectedIndex = 1
       end
     elseif key == "return" or key == "space" then
@@ -180,7 +176,7 @@ function mainMenu:keyreleased(key)
     if key == "return" or key == "space" then
       self.isPressed = false
       self:updateButtonStates()
-      self:handleMenuAction(menuOptions[self.selectedIndex].action)
+      self:handleMenuAction(self.menuOptions[self.selectedIndex].action)
     end
   end
 end
@@ -193,13 +189,13 @@ function mainMenu:handleMenuAction(action)
   local nextScene = nil
 
   if action == "start" then
-    nextScene = gameplay
+    nextScene = modSystem.getScene("gameplay")
   elseif action == "mods" then
-    nextScene = modsManagerScreen
+    nextScene = modSystem.getScene("mods_manager")
   elseif action == "credits" then
-    nextScene = credits
+    nextScene = modSystem.getScene("credits")
   elseif action == "settings" then
-    nextScene = settings
+    nextScene = modSystem.getScene("settings")
   elseif action == "quit" then
     love.event.quit()
   end
