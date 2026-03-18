@@ -58,20 +58,24 @@ function gameplay:enter(previous, ...)
   -- Add systems
   self.world:addSystems(MovementSystem, RenderSystem)
 
-  -- Initialize mod API
-  local gameState = { score = 0 }
-  local scenes = { mainMenu = mainMenu, settings = settings }
-  modSystem.initialize(self.world, gameState, scenes, concord)
+  -- Initialize mod system
+  modSystem.initialize()
 
-  -- Expose systems to mod API
-  modSystem.modAPI.MovementSystem = MovementSystem
-  modSystem.modAPI.RenderSystem = RenderSystem
-
-  -- Load mods
-  modSystem.loadAllMods()
+  -- Load and initialize enabled mods
   local mods = modSystem.getMods()
+  self.loadedMods = {}
   for name, info in pairs(mods) do
-    print(string.format("[Gameplay] Mod '%s': enabled=%s loaded=%s", name, tostring(info.enabled), tostring(info.loaded)))
+    if info.enabled then
+      local modModule = modSystem.loadMod(name)
+      if modModule then
+        _G[name] = modModule
+        table.insert(self.loadedMods, name)
+        if modModule.main then
+          print(string.format("[Gameplay] Initializing mod '%s'...", name))
+          modModule.main(self.world)
+        end
+      end
+    end
   end
 
   -- Create a test entity
@@ -83,27 +87,28 @@ end
 
 function gameplay:leave(next, ...)
   print("Leaving gameplay scene")
-  modSystem.unloadAllMods()
+  if self.loadedMods then
+    for _, name in ipairs(self.loadedMods) do
+      _G[name] = nil
+    end
+  end
+  self.loadedMods = nil
 end
 
 function gameplay:update(dt)
   self.world:emit("update", dt)
-  modSystem.update(dt)
 end
 
 function gameplay:draw()
   love.graphics.clear(0.1, 0.1, 0.1)
-  local cam = modSystem.modAPI.getGameState and modSystem.modAPI.getGameState("camera") or nil
-  love.graphics.push()
-  if cam then
-    love.graphics.translate((cam.x or 0) + ((cam.depth and cam.depth.x) or 0), (cam.y or 0) + ((cam.depth and cam.depth.y) or 0))
-    if cam.zoom then love.graphics.scale(cam.zoom) end
-  end
+
+  -- Check for camera in world or just use defaults
+  -- (Removing modAPI.getGameState for now, as it should be handled by systems)
+
   self.world:emit("draw")
-  love.graphics.pop()
-  modSystem.draw()
-  love.graphics.setColor(1, 1, 1)
-  love.graphics.print("Gameplay Screen - Press ESC to return to menu", 10, 10)
+
+  -- Note: Per user request, all UI should be handled via FlexLove in mods
+  -- or a dedicated UI system. Removing the direct graphics call.
 end
 
 function gameplay:keypressed(key)
@@ -122,6 +127,10 @@ function gameplay:keyreleased(key)
       manager:enter(mainMenu)
     end
   end
+end
+
+function gameplay:wheelmoved(x, y)
+  self.world:emit("wheelmoved", x, y)
 end
 
 return gameplay

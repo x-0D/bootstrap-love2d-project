@@ -333,7 +333,7 @@ function modsManagerScene:enableMod()
   local modName = self.selectedIndex
   if type(modName) ~= "string" then return end
 
-  local success, message = modSystem.enableMod(modName)
+  local success, message = modSystem.setEnabled(modName, true)
   if success then
     print("Mod enabled: " .. modName)
     self:rebuildUI()
@@ -346,7 +346,7 @@ function modsManagerScene:disableMod()
   local modName = self.selectedIndex
   if type(modName) ~= "string" then return end
 
-  local success, message = modSystem.disableMod(modName)
+  local success, message = modSystem.setEnabled(modName, false)
   if success then
     print("Mod disabled: " .. modName)
     self:rebuildUI()
@@ -356,29 +356,17 @@ function modsManagerScene:disableMod()
 end
 
 function modsManagerScene:loadMod()
+  -- No-op in new system, or we can just call it to check for errors
   local modName = self.selectedIndex
   if type(modName) ~= "string" then return end
-
-  local success, message = modSystem.loadMod(modName)
-  if success then
-    print("Mod loaded: " .. modName)
-    self:rebuildUI()
-  else
-    print("Failed to load mod: " .. message)
-  end
+  print("Mod " .. modName .. " will be loaded when gameplay starts")
 end
 
 function modsManagerScene:unloadMod()
+  -- No-op in new system
   local modName = self.selectedIndex
   if type(modName) ~= "string" then return end
-
-  local success, message = modSystem.unloadMod(modName)
-  if success then
-    print("Mod unloaded: " .. modName)
-    self:rebuildUI()
-  else
-    print("Failed to unload mod: " .. message)
-  end
+  print("Mod " .. modName .. " will be unloaded when leaving gameplay")
 end
 
 function modsManagerScene:rebuildUI()
