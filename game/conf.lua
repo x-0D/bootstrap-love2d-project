@@ -34,6 +34,54 @@ function love.conf(t)
   t.appendidentity        = false
   t.version               = product_config["LOVE_VERSION"]
 
+  -- Ensure identity is set for love.filesystem to access save directory
+  love.filesystem.setIdentity(t.identity)
+
+  -- Load saved settings if they exist
+  local json = require("json")
+  local saved_settings = {}
+  if love.filesystem.getInfo("settings.json") then
+    local content, _ = love.filesystem.read("settings.json")
+    if content then
+      local ok, decoded = pcall(json.decode, content)
+      if ok and decoded then
+        saved_settings = decoded
+      end
+    end
+  end
+
+  -- Optimization: If settings exist, apply them immediately to the config table
+  -- Note: love.system is not yet available in love.conf, use love._os
+  local isMac = (love._os == "OS X")
+  if saved_settings.resolution then
+    local w, h = saved_settings.resolution:match("(%d+)x(%d+)")
+    if w and h then
+      t.window.width = tonumber(w)
+      t.window.height = tonumber(h)
+    end
+  end
+  if saved_settings.mode then
+    if saved_settings.mode == "Fullscreen" then
+      t.window.fullscreen = true
+      t.window.fullscreentype = isMac and "desktop" or "exclusive"
+    elseif saved_settings.mode == "Borderless" then
+      t.window.fullscreen = false
+      t.window.borderless = true
+    else
+      t.window.fullscreen = false
+      t.window.borderless = false
+    end
+  end
+  if saved_settings.vsync then
+    t.window.vsync = (saved_settings.vsync == "On" and 1 or 0)
+  end
+  if saved_settings.msaa then
+    t.window.msaa = tonumber(saved_settings.msaa) or 0
+  end
+  if saved_settings.hidpi then
+    t.window.highdpi = (saved_settings.hidpi == "On")
+  end
+
   -- If t.console is set to true, then the debugger won't work.
   t.console               = false
   t.accelerometerjoystick = false
@@ -45,20 +93,15 @@ function love.conf(t)
 
   t.window.title          = product_config["PRODUCT_NAME"]
   t.window.icon           = nil
-  t.window.width          = 800
-  t.window.height         = 600
-  t.window.borderless     = false
+
+  -- Default values if not set by saved settings
+  t.window.width          = t.window.width or 800
+  t.window.height         = t.window.height or 600
   t.window.resizable      = false
   t.window.minwidth       = 1
   t.window.minheight      = 1
-  t.window.fullscreen     = false
   t.window.fullscreentype = "desktop"
-  t.window.vsync          = 1
-  t.window.msaa           = 0
-  t.window.depth          = nil
-  t.window.stencil        = nil
   t.window.display        = 1
-  t.window.highdpi        = true
   t.window.usedpiscale    = true
   t.window.x              = nil
   t.window.y              = nil

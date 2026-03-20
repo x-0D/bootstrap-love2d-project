@@ -1,10 +1,11 @@
 local FlexLove = require("libs.FlexLove")
 local Color = FlexLove.Color
 
+local json = require("json")
+
 local settingsScene = {
   selectedIndex = 1,
   modalIndex = 1,
-  isPressed = false,
   isConfirming = false,
   confirmationTimer = 0,
   oldSettings = nil,
@@ -63,9 +64,16 @@ end
 
 function settingsScene:initSettings()
   local w, h, flags = love.window.getMode()
+  local mode = "Windowed"
+  if flags.fullscreen then
+    mode = "Fullscreen"
+  elseif flags.borderless then
+    mode = "Borderless"
+  end
+
   self.currentSettings = {
     resolution = w .. "x" .. h,
-    mode = flags.fullscreen and (flags.fullscreentype == "desktop" and "Borderless" or "Fullscreen") or "Windowed",
+    mode = mode,
     vsync = flags.vsync and "On" or "Off",
     fps = "Unlimited",
     msaa = tostring(flags.msaa),
@@ -74,6 +82,17 @@ function settingsScene:initSettings()
     music_vol = 70,
     sfx_vol = 90
   }
+
+  -- Load settings from disk if they exist
+  if love.filesystem.getInfo("settings.json") then
+    local content = love.filesystem.read("settings.json")
+    if content then
+      local loadedSettings = json.decode(content)
+      for k, v in pairs(loadedSettings) do
+        self.currentSettings[k] = v
+      end
+    end
+  end
 
   self.pendingSettings = {}
   for k, v in pairs(self.currentSettings) do
@@ -98,9 +117,9 @@ function settingsScene:initSettings()
       { key = "hidpi", label = "HiDPI", type = "selector", values = { "On", "Off" }, currentIndex = flags.highdpi and 1 or 2 }
     },
     Audio = {
-      { key = "master_vol", label = "Master Volume", type = "slider", min = 0, max = 100, value = 80 },
-      { key = "music_vol", label = "Music Volume", type = "slider", min = 0, max = 100, value = 70 },
-      { key = "sfx_vol", label = "SFX Volume", type = "slider", min = 0, max = 100, value = 90 }
+      { key = "master_vol", label = "Master Volume", type = "slider", min = 0, max = 100, value = self.currentSettings.master_vol },
+      { key = "music_vol", label = "Music Volume", type = "slider", min = 0, max = 100, value = self.currentSettings.music_vol },
+      { key = "sfx_vol", label = "SFX Volume", type = "slider", min = 0, max = 100, value = self.currentSettings.sfx_vol }
     },
     Gameplay = {
       { key = "language", label = "Language", type = "selector", values = { "English", "Russian", "Spanish" }, currentIndex = 1 },
@@ -112,33 +131,21 @@ function settingsScene:initSettings()
     }
   }
 
-  -- Sync indices
+  -- Sync indices and values
   for i, v in ipairs(self.categories.Graphics[2].values) do
     if v == self.currentSettings.mode then self.categories.Graphics[2].currentIndex = i; break end
   end
   for i, v in ipairs(self.categories.Graphics[5].values) do
     if v == self.currentSettings.msaa then self.categories.Graphics[5].currentIndex = i; break end
   end
+  for i, v in ipairs(self.categories.Graphics[6].values) do
+    if v == self.currentSettings.hidpi then self.categories.Graphics[6].currentIndex = i; break end
+  end
 
   self.options = self.categories[self.currentCategory]
 end
 
 function settingsScene:updateButtonStates()
-  if self.isConfirming then
-    local buttons = { self.elements.keepBtn, self.elements.revertBtn }
-    for i, btn in ipairs(buttons) do
-      if btn then
-        local isSelected = (self.modalIndex == i)
-        btn.textColor = isSelected and COLORS.HOVER or COLORS.NORMAL
-        btn.backgroundColor = isSelected and COLORS.ACCENT or Color.new(0.2, 0.2, 0.2, 0.5)
-        if btn._themeManager then
-          btn._themeManager:setState(isSelected and "hover" or "normal")
-        end
-      end
-    end
-    return
-  end
-
   -- Update category tabs
   if self.elements.tabs then
     for i, tab in ipairs(self.elements.tabs) do
@@ -156,7 +163,6 @@ function settingsScene:updateButtonStates()
       local isSelected = (i == self.selectedIndex)
       if row then
         row.label.textColor = isSelected and COLORS.HOVER or COLORS.NORMAL
-        -- Row highlight is now handled by smooth selectionHighlight element
       end
     end
   end
@@ -173,6 +179,21 @@ function settingsScene:updateButtonStates()
         btn._themeManager:setState(isSelected and "hover" or "normal")
       end
     end
+  end
+
+  if self.isConfirming then
+    local buttons = { self.elements.keepBtn, self.elements.revertBtn }
+    for i, btn in ipairs(buttons) do
+      if btn then
+        local isSelected = (self.modalIndex == i)
+        btn.textColor = isSelected and COLORS.HOVER or COLORS.NORMAL
+        btn.backgroundColor = isSelected and COLORS.ACCENT or Color.new(0.2, 0.2, 0.2, 0.5)
+        if btn._themeManager then
+          btn._themeManager:setState(isSelected and "hover" or "normal")
+        end
+      end
+    end
+    return
   end
 end
 
@@ -193,6 +214,11 @@ function settingsScene:changeValue(optionIdx, delta)
     if self.elements.rows[optionIdx] and self.elements.rows[optionIdx].valueText then
       self.elements.rows[optionIdx].valueText.text = tostring(math.floor(opt.value))
     end
+    -- Update slider fill width
+    if self.elements.rows[optionIdx] and self.elements.rows[optionIdx].fill then
+      local fillWidth = (opt.value - opt.min) / (opt.max - opt.min) * 100
+      self.elements.rows[optionIdx].fill.width = fillWidth .. "%"
+    end
   end
 end
 
@@ -202,20 +228,38 @@ function settingsScene:applySettings()
     for k, v in pairs(self.pendingSettings) do
       self.currentSettings[k] = v
     end
+    self:saveSettings()
     return
   end
 
   local w, h = self.pendingSettings.resolution:match("(%d+)x(%d+)")
   w, h = tonumber(w), tonumber(h)
 
+  local isMac = (love.system.getOS() == "OS X")
+  local fullscreentype = "desktop"
+  if self.pendingSettings.mode == "Fullscreen" and not isMac then
+    fullscreentype = "exclusive"
+  end
+
   local flags = {
     fullscreen = (self.pendingSettings.mode ~= "Windowed"),
-    fullscreentype = (self.pendingSettings.mode == "Borderless" and "desktop" or "exclusive"),
-    vsync = (self.pendingSettings.vsync == "On"),
+    fullscreentype = fullscreentype,
+    vsync = (self.pendingSettings.vsync == "On" and 1 or 0),
     msaa = tonumber(self.pendingSettings.msaa),
     highdpi = (self.pendingSettings.hidpi == "On"),
     display = 1
   }
+
+  -- On macOS, Borderless often works better as a decorated window at native res or true space fullscreen
+  -- But here we stick to LÖVE's definitions
+  if self.pendingSettings.mode == "Borderless" then
+    flags.fullscreen = false
+    flags.borderless = true
+    -- For borderless, we usually want the current desktop resolution
+    if isMac then
+      -- macOS special handling if needed
+    end
+  end
 
   local oldW, oldH, oldFlags = love.window.getMode()
   self.oldSettings = {
@@ -231,7 +275,7 @@ function settingsScene:applySettings()
     FlexLove.resize()
     self:rebuildUI()
     self.isConfirming = true
-    self.confirmationTimer = 15 -- AAA standard is usually shorter
+    self.confirmationTimer = 10 -- Standard AAA timeout
     self.modalIndex = 1
     self:createConfirmationOverlay()
     self:updateButtonStates()
@@ -240,11 +284,25 @@ function settingsScene:applySettings()
   end
 end
 
+function settingsScene:saveSettings()
+  local success, err = love.filesystem.write("settings.json", json.encode(self.currentSettings))
+  if success then
+    print("Settings saved successfully")
+    -- Apply non-window settings immediately
+    if love.audio then
+      love.audio.setVolume(self.currentSettings.master_vol / 100)
+    end
+  else
+    print("Failed to save settings: " .. (err or "unknown error"))
+  end
+end
+
 function settingsScene:confirmSettings()
   self.isConfirming = false
   for k, v in pairs(self.pendingSettings) do
     self.currentSettings[k] = v
   end
+  self:saveSettings()
   if self.confirmationOverlay then
     self.confirmationOverlay:destroy()
     self.confirmationOverlay = nil
@@ -273,7 +331,39 @@ function settingsScene:rebuildUI()
   if self.rootElement then
     self.rootElement:destroy()
   end
+  if self.confirmationOverlay then
+    self.confirmationOverlay:destroy()
+  end
+
+  -- Re-initialize FlexLove with current window dimensions
+  -- Temporarily use immediateMode during UI creation to batch layouts
+  -- Disable performance warnings during rebuild to avoid layout thrashing spam
+  local w, h = love.graphics.getDimensions()
+  FlexLove.init({
+    theme = "metal",
+    immediateMode = true,
+    autoFrameManagement = true,
+    baseScale = { width = w, height = h },
+    performance = { warningsEnabled = false }
+  })
+
+  FlexLove.beginFrame()
   self:createUI()
+
+  -- Re-enable confirmation overlay if needed
+  if self.isConfirming then
+    self:createConfirmationOverlay()
+  end
+  FlexLove.endFrame()
+
+  -- Switch back to retained mode for efficient updates
+  FlexLove.init({
+    theme = "metal",
+    immediateMode = false,
+    autoFrameManagement = true,
+    baseScale = { width = w, height = h },
+    performance = { warningsEnabled = false }
+  })
 end
 
 function settingsScene:switchCategory(catId)
@@ -281,6 +371,7 @@ function settingsScene:switchCategory(catId)
   self.currentCategory = catId
   self.options = self.categories[self.currentCategory]
   self.selectedIndex = 1
+  self.categoryOpacity = 0 -- Reset fade for transition
   self:rebuildUI()
 end
 
@@ -294,6 +385,7 @@ local function getResponsiveScale()
 end
 
 function settingsScene:createUI()
+  self.elements = {} -- Clear old references
   local scale = getResponsiveScale()
   local isNarrow = love.graphics.getWidth() < 1280
 
@@ -341,7 +433,6 @@ function settingsScene:createUI()
       borderRadius = { topLeft = 8, topRight = 8 },
       onEvent = function(_, event)
         if event.type == "release" then
-          self.categoryOpacity = 0 -- Reset fade for transition
           self:switchCategory(cat.id)
         end
       end
@@ -456,6 +547,7 @@ function settingsScene:createUI()
         text = "<",
         textSize = tostring(math.floor(24 * scale)) .. "px",
         textColor = COLORS.ACCENT,
+        textAlign = "center",
         width = 40 * scale,
         height = 40 * scale,
         onEvent = function(_, event)
@@ -486,6 +578,7 @@ function settingsScene:createUI()
         text = ">",
         textSize = tostring(math.floor(24 * scale)) .. "px",
         textColor = COLORS.ACCENT,
+        textAlign = "center",
         width = 40 * scale,
         height = 40 * scale,
         onEvent = function(_, event)
@@ -506,6 +599,7 @@ function settingsScene:createUI()
         text = "-",
         textSize = tostring(math.floor(24 * scale)) .. "px",
         textColor = COLORS.ACCENT,
+        textAlign = "center",
         width = 40 * scale,
         height = 40 * scale,
         onEvent = function(_, event)
@@ -532,7 +626,7 @@ function settingsScene:createUI()
       })
 
       local fillWidth = (opt.value - opt.min) / (opt.max - opt.min) * 100
-      FlexLove.new({
+      row.fill = FlexLove.new({
         parent = sliderBg,
         width = fillWidth .. "%",
         height = "100%",
@@ -557,6 +651,7 @@ function settingsScene:createUI()
         text = "+",
         textSize = tostring(math.floor(24 * scale)) .. "px",
         textColor = COLORS.ACCENT,
+        textAlign = "center",
         width = 40 * scale,
         height = 40 * scale,
         onEvent = function(_, event)
@@ -599,7 +694,8 @@ function settingsScene:createUI()
     text = "Select a setting to see its description and impact on performance.",
     textSize = tostring(math.floor(16 * scale)) .. "px",
     textColor = COLORS.NORMAL,
-    width = "100%"
+    width = "100%",
+    textWrap = "word"
   })
 
   -- Footer Navigation
@@ -705,6 +801,7 @@ function settingsScene:createUI()
 end
 
 function settingsScene:createConfirmationOverlay()
+  local scale = getResponsiveScale()
   self.confirmationOverlay = FlexLove.new({
     width = "100%",
     height = "100%",
@@ -718,8 +815,8 @@ function settingsScene:createConfirmationOverlay()
 
   local dialog = FlexLove.new({
     parent = self.confirmationOverlay,
-    width = 600,
-    height = 350,
+    width = 600 * scale,
+    height = 350 * scale,
     backgroundColor = COLORS.PANEL,
     borderRadius = 4,
     border = { top = true },
@@ -729,38 +826,38 @@ function settingsScene:createConfirmationOverlay()
     flexDirection = "column",
     justifyContent = "center",
     alignItems = "center",
-    padding = 60,
-    gap = 30
+    padding = 60 * scale,
+    gap = 30 * scale
   })
 
   FlexLove.new({
     parent = dialog,
     text = "KEEP THESE DISPLAY SETTINGS?",
-    textSize = "2xl",
+    textSize = tostring(math.floor(32 * scale)) .. "px",
     textColor = COLORS.HOVER
   })
 
   self.elements.timerText = FlexLove.new({
     parent = dialog,
-    text = "Reverting in 15 seconds...",
-    textSize = "lg",
+    text = string.format("Reverting in %d seconds...", math.max(0, math.ceil(self.confirmationTimer))),
+    textSize = tostring(math.floor(20 * scale)) .. "px",
     textColor = COLORS.NORMAL
   })
 
   local btnRow = FlexLove.new({
     parent = dialog,
     width = "100%",
-    height = 60,
+    height = 60 * scale,
     positioning = "flex",
     flexDirection = "row",
     justifyContent = "center",
-    gap = 20
+    gap = 20 * scale
   })
 
   self.elements.keepBtn = FlexLove.new({
     parent = btnRow,
-    width = 200,
-    height = 50,
+    width = 200 * scale,
+    height = 50 * scale,
     themeComponent = "buttonv2",
     text = "KEEP CHANGES",
     onEvent = function(_, event)
@@ -775,8 +872,8 @@ function settingsScene:createConfirmationOverlay()
 
   self.elements.revertBtn = FlexLove.new({
     parent = btnRow,
-    width = 200,
-    height = 50,
+    width = 200 * scale,
+    height = 50 * scale,
     themeComponent = "buttonv2",
     text = "REVERT",
     onEvent = function(_, event)
@@ -817,7 +914,7 @@ function settingsScene:update(dt)
   FlexLove.update(dt)
 
   -- Smooth Selection Animation
-  local isOptionSelected = (self.selectedIndex <= #self.options)
+  local isOptionSelected = (self.selectedIndex <= #self.options) and not self.isConfirming
   local row = isOptionSelected and self.elements.rows and self.elements.rows[self.selectedIndex]
 
   if row then
@@ -845,7 +942,7 @@ function settingsScene:update(dt)
   if self.isConfirming then
     self.confirmationTimer = self.confirmationTimer - dt
     if self.elements.timerText then
-      self.elements.timerText.text = string.format("Reverting in %d seconds...", math.ceil(self.confirmationTimer))
+      self.elements.timerText.text = string.format("Reverting in %d seconds...", math.max(0, math.ceil(self.confirmationTimer)))
     end
     if self.confirmationTimer <= 0 then
       self:revertSettings()
@@ -894,9 +991,17 @@ function settingsScene:keypressed(key)
       self.selectedIndex = self.selectedIndex + 1
       if self.selectedIndex > totalItems then self.selectedIndex = 1 end
     elseif key == "left" then
-      if self.selectedIndex <= #self.options then self:changeValue(self.selectedIndex, -1) end
+      if self.selectedIndex <= #self.options then
+        local opt = self.options[self.selectedIndex]
+        local delta = (opt.type == "slider") and -5 or -1
+        self:changeValue(self.selectedIndex, delta)
+      end
     elseif key == "right" then
-      if self.selectedIndex <= #self.options then self:changeValue(self.selectedIndex, 1) end
+       if self.selectedIndex <= #self.options then
+         local opt = self.options[self.selectedIndex]
+         local delta = (opt.type == "slider") and 5 or 1
+         self:changeValue(self.selectedIndex, delta)
+       end
     elseif key == "return" or key == "space" then
       if self.selectedIndex == #self.options + 1 then self:applySettings()
       elseif self.selectedIndex == #self.options + 2 then

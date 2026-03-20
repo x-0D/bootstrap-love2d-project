@@ -54,7 +54,7 @@ function gameplay:update(dt)
 end
 
 function gameplay:draw()
-  love.graphics.clear(0.1, 0.1, 0.1)
+  love.graphics.clear(1.0, 0.1, 0.1)
 
   -- Check for camera in world or just use defaults
   -- (Removing modAPI.getGameState for now, as it should be handled by systems)

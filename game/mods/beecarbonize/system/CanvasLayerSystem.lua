@@ -6,22 +6,68 @@ local CanvasLayerSystem = concord.system({
   cameras = { "beecarbonize.camera" }
 })
 
-local TILT_FACTOR = 0.2
 local perspectiveCode = [[
-  extern float tilt;
-  vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
-    float scale = 1.0 - tilt * tc.y;
-    float x_tex = (tc.x - 0.5) * scale + 0.5;
-    if (x_tex < 0.0 || x_tex > 1.0) {
-      return vec4(0.0);
-    }
-    return Texel(tex, vec2(x_tex, tc.y)) * color;
+  extern float fov, y_rot, x_rot, inset, zoom;
+  extern bool cull_back;
+  extern vec2 u_texture_size;
+
+  varying vec2 v_o;
+  varying vec3 v_p;
+
+  #ifdef VERTEX
+  vec4 position(mat4 transform_projection, vec4 vertex_pos) {
+    vec2 rot = radians(vec2(y_rot, x_rot));
+    vec2 s = sin(rot), c = cos(rot);
+
+    // Rotation matrix (Y then X)
+    mat3 m = mat3(
+       c.x,       0.0, -s.x,
+       s.x * s.y, c.y,  c.x * s.y,
+       s.x * c.y, -s.y, c.x * c.y
+    );
+
+    float t = tan(radians(fov * 0.5));
+    vec2 uv = VertexTexCoord.xy - 0.5;
+
+    v_p = m * vec3(uv, 0.5 / t);
+    float v = 0.5 / t + 0.5;
+    v_p.xy *= v * m[2].z;
+    v_o = v * m[2].xy;
+
+    vertex_pos.xy += uv * u_texture_size * t * (1.0 - inset);
+    return transform_projection * vertex_pos;
   }
+  #endif
+
+  #ifdef PIXEL
+  vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    if (cull_back && v_p.z <= 0.0) discard;
+    vec2 uv = (v_p.xy / v_p.z - v_o) / zoom + 0.5;
+    vec4 tex_color = Texel(tex, uv);
+    tex_color.a *= step(max(abs(uv.x - 0.5), abs(uv.y - 0.5)), 0.5);
+    return tex_color * color;
+  }
+  #endif
 ]]
 
 function CanvasLayerSystem:init()
+  local fov = 90.0
+  local x_rot = 25.0
+  local y_rot = 0.0
+
+  -- Calculate zoom to fill screen edges
+  -- zoom = 1 + sin(angle) * tan(fov/2)
+  -- added a small safety margin (1.05x) to ensure no gaps at the edges
+  local t = math.tan(math.rad(fov / 2))
+  local zoom = (1.02 + (math.sin(math.abs(math.rad(x_rot))) + math.sin(math.abs(math.rad(y_rot)))) * t)
+
   self.perspectiveShader = love.graphics.newShader(perspectiveCode)
-  self.perspectiveShader:send("tilt", TILT_FACTOR)
+  self.perspectiveShader:send("fov", fov)
+  self.perspectiveShader:send("y_rot", y_rot)
+  self.perspectiveShader:send("x_rot", x_rot)
+  self.perspectiveShader:send("inset", 0.0)
+  self.perspectiveShader:send("zoom", zoom)
+  self.perspectiveShader:send("cull_back", true)
   self.finalCanvas = nil
   self.lastW = 0
   self.lastH = 0
@@ -101,6 +147,8 @@ function CanvasLayerSystem:draw()
     local l = e["beecarbonize.canvas_layer"]
     if l.canvas then -- EXTRA CHECK HERE
       if l.use_shader then
+        local cw, ch = l.canvas:getDimensions()
+        self.perspectiveShader:send("u_texture_size", {cw, ch})
         love.graphics.setShader(self.perspectiveShader)
       end
       love.graphics.draw(l.canvas)
