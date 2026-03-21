@@ -3,13 +3,11 @@ local Color = FlexLove.Color
 
 local modsManagerScene = {
   selectedIndex = 1,
+  selectedMod = nil,
   isPressed = false,
   pressedKeys = {},
   elements = {},
-  rootElement = nil,
-  confirmationOverlay = nil,
-  confirmationTimer = 0,
-  isConfirming = false
+  rootElement = nil
 }
 
 local COLORS = {
@@ -21,10 +19,57 @@ local COLORS = {
   DISABLED = Color.new(0.8, 0.2, 0.2, 1)
 }
 
+function modsManagerScene:createToggleComponent(props)
+  local isEnabled = props.isEnabled
+  local isLocked = props.isLocked
+
+  local track = FlexLove.new({
+    parent = props.parent,
+    width = 54,
+    height = 28,
+    backgroundColor = isEnabled and COLORS.ENABLED or Color.new(0.2, 0.2, 0.25, 1),
+    borderRadius = 14,
+    disabled = isLocked,
+    opacity = isLocked and 0.5 or 1,
+    positioning = "flex",
+    flexDirection = "horizontal",
+    justifyContent = isEnabled and "flex-end" or "flex-start",
+    alignItems = "center",
+    padding = { horizontal = 3 },
+    onEvent = function(elem, event)
+      if elem.disabled then return end
+      if event.type == "release" then
+        print("[ModsManager] Toggle release detected for mod: " .. tostring(self.selectedMod))
+        if props.onToggle then props.onToggle() end
+      elseif event.type == "hover" then
+        elem.borderColor = COLORS.HOVER
+        elem.borderWidth = 1
+      elseif event.type == "unhover" then
+        elem.borderWidth = 0
+      end
+    end
+  })
+
+  local knob = FlexLove.new({
+    parent = track,
+    width = 22,
+    height = 22,
+    backgroundColor = isEnabled and COLORS.HOVER or COLORS.NORMAL,
+    borderRadius = 11,
+    disabled = true,
+    positioning = "absolute",
+    left = isEnabled and 28 or 4,
+    top = 3
+  })
+
+  return track, knob
+end
+
 function modsManagerScene:createUI()
   if self.rootElement then
     self.rootElement:destroy()
   end
+  self.elements = {}
 
   local w, h = love.graphics.getDimensions()
   FlexLove.init({
@@ -40,10 +85,10 @@ function modsManagerScene:createUI()
     backgroundColor = Color.new(0.05, 0.05, 0.08, 1),
     positioning = "flex",
     flexDirection = "column",
-    justifyContent = "center",
+    justifyContent = "flex-start",
     alignItems = "center",
     gap = 16,
-    padding = { horizontal = 24, vertical = 12 }
+    padding = { horizontal = 24, vertical = 20 }
   })
 
   local title = FlexLove.new({
@@ -60,26 +105,68 @@ function modsManagerScene:createUI()
     margin = { bottom = 20 }
   })
 
-  local modsContainer = FlexLove.new({
+  local mainContainer = FlexLove.new({
     parent = self.rootElement,
-    width = "90%",
-    height = "auto",
+    width = "95%",
+    height = 0,
     flexGrow = 1,
+    positioning = "flex",
+    flexDirection = "horizontal",
+    gap = 20,
+    margin = { bottom = 10 }
+  })
+
+  local modsList = FlexLove.new({
+    parent = mainContainer,
+    width = 300,
+    height = "100%",
     positioning = "flex",
     flexDirection = "column",
     gap = 5,
     padding = { vertical = 10, horizontal = 10 },
     backgroundColor = Color.new(0.1, 0.1, 0.15, 0.5),
     borderRadius = 8,
+    border = { right = true, left = true, top = true, bottom = true },
+    borderColor = Color.new(1, 1, 1, 0.1),
+    borderWidth = 1,
     overflowY = "auto"
   })
+
+  local descriptionPanel = FlexLove.new({
+    parent = mainContainer,
+    width = 0,
+    flexGrow = 1,
+    height = "100%",
+    positioning = "flex",
+    flexDirection = "column",
+    gap = 10,
+    padding = { vertical = 20, horizontal = 20 },
+    backgroundColor = Color.new(0.1, 0.1, 0.15, 0.8),
+    borderRadius = 8,
+    border = { left = true, right = true, top = true, bottom = true },
+    borderColor = COLORS.ACCENT,
+    borderWidth = 2,
+    opacity = 0
+  })
+
+  self.elements.descriptionPanel = descriptionPanel
 
   self.elements.rows = {}
   local mods = modSystem.getMods()
 
-  for modName, modInfo in pairs(mods) do
+  -- Create a sorted list of mod names for consistent display
+  local modNames = {}
+  for name in pairs(mods) do
+    table.insert(modNames, name)
+  end
+  table.sort(modNames)
+
+  for _, modName in ipairs(modNames) do
+    local modInfo = mods[modName]
+    local isEnabled = modInfo.enabled
+
     local row = FlexLove.new({
-      parent = modsContainer,
+      parent = modsList,
       width = "100%",
       height = 50,
       positioning = "flex",
@@ -92,63 +179,106 @@ function modsManagerScene:createUI()
         if event.type == "hover" then
           self.selectedIndex = modName
           self:updateButtonStates()
+        elseif event.type == "release" then
+          self.selectedMod = modName
+          self:rebuildUI()
         end
       end
     })
 
-    local leftCol = FlexLove.new({
-      parent = row,
-      width = "50%",
-      height = "100%",
-      positioning = "flex",
-      flexDirection = "column",
-      justifyContent = "center"
-    })
-
     local nameText = FlexLove.new({
-      parent = leftCol,
-      text = modInfo.name,
-      textSize = "lg",
-      textColor = COLORS.NORMAL
-    })
-
-    local descText = FlexLove.new({
-      parent = leftCol,
-      text = modInfo.description or "No description",
-      textSize = "sm",
-      textColor = COLORS.NORMAL
-    })
-
-    local rightCol = FlexLove.new({
       parent = row,
-      width = "40%",
-      height = "100%",
-      positioning = "flex",
-      flexDirection = "column",
-      justifyContent = "center",
-      alignItems = "flex-end"
-    })
-
-    local statusText = FlexLove.new({
-      parent = rightCol,
-      text = modInfo.enabled and "Enabled" or "Disabled",
-      textSize = "sm",
-      textColor = modInfo.enabled and COLORS.ENABLED or COLORS.DISABLED
-    })
-
-    local versionText = FlexLove.new({
-      parent = rightCol,
-      text = "v" .. (modInfo.version or "1.0.0"),
-      textSize = "sm",
-      textColor = COLORS.NORMAL
+      text = modInfo.displayName or modInfo.name,
+      textSize = "lg",
+      textColor = COLORS.NORMAL,
+      opacity = isEnabled and 1 or 0.5
     })
 
     row.nameElem = nameText
-    row.descElem = descText
-    row.statusText = statusText
-    row.versionElem = versionText
     self.elements.rows[modName] = row
   end
+
+
+
+  local header = FlexLove.new({
+    parent = descriptionPanel,
+    width = "100%",
+    height = 100,
+    positioning = "flex",
+    flexDirection = "horizontal",
+    alignItems = "center",
+    gap = 20,
+    border = { bottom = true },
+    borderColor = Color.new(1, 1, 1, 0.1),
+    margin = { bottom = 10 },
+    padding = { vertical = 10, horizontal = 10 },
+    disabled = true -- Do not block events for children
+  })
+
+  local selectedModInfo = modSystem.getMods()[self.selectedMod]
+  local isEnabled = selectedModInfo and selectedModInfo.enabled or false
+  local isCore = self.selectedMod == "core"
+  print(string.format("[ModsManager] createUI: mod=%s, isEnabled=%s", tostring(self.selectedMod), tostring(isEnabled)))
+
+  -- Switch Toggle Component
+  self.elements.toggleTrack, self.elements.toggleKnob = self:createToggleComponent({
+    parent = header,
+    isEnabled = isEnabled,
+    isLocked = isCore,
+    onToggle = function() self:toggleMod() end
+  })
+
+  local headerInfo = FlexLove.new({
+    parent = header,
+    width = 0,
+    flexGrow = 1,
+    height = "100%",
+    positioning = "flex",
+    flexDirection = "column",
+    justifyContent = "center",
+    gap = 2
+  })
+
+  local descriptionTitle = FlexLove.new({
+    parent = headerInfo,
+    text = "Select a mod to see details",
+    textSize = "2xl",
+    textColor = COLORS.HOVER,
+    width = "100%",
+    textWrap = "word"
+  })
+
+  local versionText = FlexLove.new({
+    parent = headerInfo,
+    text = "",
+    textSize = "sm",
+    textColor = COLORS.NORMAL,
+    width = "100%"
+  })
+
+  local contentArea = FlexLove.new({
+    parent = descriptionPanel,
+    width = "100%",
+    flexGrow = 1,
+    positioning = "flex",
+    flexDirection = "column",
+    gap = 10,
+    overflowY = "auto",
+    padding = { right = 10, vertical = 5 }
+  })
+
+  local descriptionText = FlexLove.new({
+    parent = contentArea,
+    text = "",
+    textSize = "lg",
+    textColor = COLORS.NORMAL,
+    textWrap = "word",
+    width = "100%"
+  })
+
+  self.elements.descriptionTitle = descriptionTitle
+  self.elements.descriptionText = descriptionText
+  self.elements.versionText = versionText
 
   local buttonContainer = FlexLove.new({
     parent = self.rootElement,
@@ -161,78 +291,6 @@ function modsManagerScene:createUI()
     gap = 20,
     flexWrap = "wrap",
     margin = { top = 20 }
-  })
-
-  self.elements.enableBtn = FlexLove.new({
-    parent = buttonContainer,
-    width = 160,
-    height = 48,
-    themeComponent = "buttonv2",
-    text = "Enable",
-    textSize = "xl",
-    textColor = COLORS.NORMAL,
-    onEvent = function(elem, event)
-      if event.type == "hover" then
-        self.selectedIndex = "enable"
-        self:updateButtonStates()
-      elseif event.type == "release" then
-        self:enableMod()
-      end
-    end
-  })
-
-  self.elements.disableBtn = FlexLove.new({
-    parent = buttonContainer,
-    width = 160,
-    height = 48,
-    themeComponent = "buttonv2",
-    text = "Disable",
-    textSize = "xl",
-    textColor = COLORS.NORMAL,
-    onEvent = function(elem, event)
-      if event.type == "hover" then
-        self.selectedIndex = "disable"
-        self:updateButtonStates()
-      elseif event.type == "release" then
-        self:disableMod()
-      end
-    end
-  })
-
-  self.elements.loadBtn = FlexLove.new({
-    parent = buttonContainer,
-    width = 160,
-    height = 48,
-    themeComponent = "buttonv2",
-    text = "Load",
-    textSize = "xl",
-    textColor = COLORS.NORMAL,
-    onEvent = function(elem, event)
-      if event.type == "hover" then
-        self.selectedIndex = "load"
-        self:updateButtonStates()
-      elseif event.type == "release" then
-        self:loadMod()
-      end
-    end
-  })
-
-  self.elements.unloadBtn = FlexLove.new({
-    parent = buttonContainer,
-    width = 160,
-    height = 48,
-    themeComponent = "buttonv2",
-    text = "Unload",
-    textSize = "xl",
-    textColor = COLORS.NORMAL,
-    onEvent = function(elem, event)
-      if event.type == "hover" then
-        self.selectedIndex = "unload"
-        self:updateButtonStates()
-      elseif event.type == "release" then
-        self:unloadMod()
-      end
-    end
   })
 
   self.elements.backBtn = FlexLove.new({
@@ -260,67 +318,44 @@ function modsManagerScene:createUI()
 end
 
 function modsManagerScene:updateButtonStates()
-  if self.isConfirming then
-    if self.elements.keepBtn then
-      local isSelected = (self.modalIndex == 1)
-      self.elements.keepBtn.textColor = isSelected and COLORS.HOVER or COLORS.NORMAL
-      if self.elements.keepBtn._themeManager then
-        self.elements.keepBtn._themeManager:setState(isSelected and "hover" or "normal")
-      end
-    end
-    if self.elements.revertBtn then
-      local isSelected = (self.modalIndex == 2)
-      self.elements.revertBtn.textColor = isSelected and COLORS.HOVER or COLORS.NORMAL
-      if self.elements.revertBtn._themeManager then
-        self.elements.revertBtn._themeManager:setState(isSelected and "hover" or "normal")
-      end
-    end
-    return
-  end
+  if not self.elements.rows or not self.elements.descriptionPanel then return end
 
-  if not self.elements.rows then return end
-
-  local totalItems = 5
-
+  local mods = modSystem.getMods()
   for modName, row in pairs(self.elements.rows) do
-    local isSelected = (modName == self.selectedIndex)
+    local modInfo = mods[modName]
+    local isHovered = (modName == self.selectedIndex)
+    local isSelected = (modName == self.selectedMod)
+    local isEnabled = modInfo and modInfo.enabled
+
     if isSelected then
+      -- Persistent highlight for the active mod
+      row.backgroundColor = Color.new(COLORS.ACCENT.r, COLORS.ACCENT.g, COLORS.ACCENT.b, 0.4)
+      row.nameElem.textColor = COLORS.HOVER
+    elseif isHovered then
+      -- Temporary highlight for hovering/keyboard focus
       row.backgroundColor = Color.new(1, 1, 1, 0.1)
       row.nameElem.textColor = COLORS.HOVER
-      row.descElem.textColor = COLORS.HOVER
     else
       row.backgroundColor = Color.new(0, 0, 0, 0)
       row.nameElem.textColor = COLORS.NORMAL
-      row.descElem.textColor = COLORS.NORMAL
     end
+    -- Always reflect the actual enabled state, regardless of selection/hover
+    row.nameElem.opacity = isEnabled and 1 or 0.5
   end
 
-  local enableBtn = self.elements.enableBtn
-  local isEnableSelected = (self.selectedIndex == "enable")
-  if enableBtn then
-    enableBtn.textColor = isEnableSelected and COLORS.HOVER or COLORS.NORMAL
-    if enableBtn._themeManager then enableBtn._themeManager:setState(isEnableSelected and "hover" or "normal") end
-  end
-
-  local disableBtn = self.elements.disableBtn
-  local isDisableSelected = (self.selectedIndex == "disable")
-  if disableBtn then
-    disableBtn.textColor = isDisableSelected and COLORS.HOVER or COLORS.NORMAL
-    if disableBtn._themeManager then disableBtn._themeManager:setState(isDisableSelected and "hover" or "normal") end
-  end
-
-  local loadBtn = self.elements.loadBtn
-  local isLoadSelected = (self.selectedIndex == "load")
-  if loadBtn then
-    loadBtn.textColor = isLoadSelected and COLORS.HOVER or COLORS.NORMAL
-    if loadBtn._themeManager then loadBtn._themeManager:setState(isLoadSelected and "hover" or "normal") end
-  end
-
-  local unloadBtn = self.elements.unloadBtn
-  local isUnloadSelected = (self.selectedIndex == "unload")
-  if unloadBtn then
-    unloadBtn.textColor = isUnloadSelected and COLORS.HOVER or COLORS.NORMAL
-    if unloadBtn._themeManager then unloadBtn._themeManager:setState(isUnloadSelected and "hover" or "normal") end
+  local selectedMod = modSystem.getMods()[self.selectedMod]
+  if selectedMod then
+    if self.elements.descriptionPanel.opacity == 0 then
+      self.elements.descriptionPanel:fadeIn(0.2)
+    end
+    self.elements.descriptionTitle:updateText(selectedMod.displayName or selectedMod.name)
+    self.elements.descriptionText:updateText(selectedMod.description or "No description available.")
+    self.elements.versionText:updateText("Version: " .. (selectedMod.version or "1.0.0"))
+  else
+    self.elements.descriptionPanel.opacity = 0
+    self.elements.descriptionTitle.text = ""
+    self.elements.descriptionText.text = ""
+    self.elements.versionText.text = ""
   end
 
   local backBtn = self.elements.backBtn
@@ -331,8 +366,22 @@ function modsManagerScene:updateButtonStates()
   end
 end
 
+function modsManagerScene:toggleMod()
+  print("[ModsManager] toggleMod called for: " .. tostring(self.selectedMod))
+  local modName = self.selectedMod
+  if not modName then return end
+  local selectedMod = modSystem.getMods()[modName]
+  if not selectedMod then return end
+
+  if selectedMod.enabled then
+    self:disableMod()
+  else
+    self:enableMod()
+  end
+end
+
 function modsManagerScene:enableMod()
-  local modName = self.selectedIndex
+  local modName = self.selectedMod
   if type(modName) ~= "string" then return end
 
   local success, message = modSystem.setEnabled(modName, true)
@@ -345,7 +394,7 @@ function modsManagerScene:enableMod()
 end
 
 function modsManagerScene:disableMod()
-  local modName = self.selectedIndex
+  local modName = self.selectedMod
   if type(modName) ~= "string" then return end
 
   local success, message = modSystem.setEnabled(modName, false)
@@ -355,6 +404,10 @@ function modsManagerScene:disableMod()
   else
     print("Failed to disable mod: " .. message)
   end
+end
+
+function modsManagerScene:rebuildUI()
+  self:createUI()
 end
 
 function modsManagerScene:loadMod()
@@ -371,125 +424,11 @@ function modsManagerScene:unloadMod()
   print("Mod " .. modName .. " will be unloaded when leaving gameplay")
 end
 
-function modsManagerScene:rebuildUI()
-  self:createUI()
-end
-
-function modsManagerScene:createConfirmationOverlay()
-  self.confirmationOverlay = FlexLove.new({
-    width = "100%",
-    height = "100%",
-    backgroundColor = Color.new(0, 0, 0, 0.8),
-    positioning = "flex",
-    flexDirection = "column",
-    justifyContent = "center",
-    alignItems = "center",
-    zIndex = 100
-  })
-
-  local dialog = FlexLove.new({
-    parent = self.confirmationOverlay,
-    width = 500,
-    height = 300,
-    backgroundColor = Color.new(0.1, 0.1, 0.15, 1),
-    borderRadius = 15,
-    border = { top = true, bottom = true, left = true, right = true },
-    borderColor = COLORS.ACCENT,
-    positioning = "flex",
-    flexDirection = "column",
-    justifyContent = "center",
-    alignItems = "center",
-    padding = 40,
-    gap = 20
-  })
-
-  FlexLove.new({
-    parent = dialog,
-    text = "Confirm action?",
-    textSize = "2xl",
-    textColor = COLORS.HOVER
-  })
-
-  self.elements.timerText = FlexLove.new({
-    parent = dialog,
-    text = "Action will be executed immediately",
-    textSize = "lg",
-    textColor = COLORS.NORMAL
-  })
-
-  local btnRow = FlexLove.new({
-    parent = dialog,
-    width = "100%",
-    height = 60,
-    positioning = "flex",
-    flexDirection = "horizontal",
-    justifyContent = "center",
-    gap = 20
-  })
-
-  self.elements.keepBtn = FlexLove.new({
-    parent = btnRow,
-    width = 150,
-    height = 50,
-    themeComponent = "buttonv2",
-    text = "Confirm",
-    onEvent = function(_, event)
-      if event.type == "hover" then
-        self.modalIndex = 1
-        self:updateButtonStates()
-      elseif event.type == "release" then
-        self:confirmAction()
-      end
-    end
-  })
-
-  self.elements.revertBtn = FlexLove.new({
-    parent = btnRow,
-    width = 150,
-    height = 50,
-    themeComponent = "buttonv2",
-    text = "Cancel",
-    onEvent = function(_, event)
-      if event.type == "hover" then
-        self.modalIndex = 2
-        self:updateButtonStates()
-      elseif event.type == "release" then
-        self:cancelAction()
-      end
-    end
-  })
-end
-
-function modsManagerScene:confirmAction()
-  self.isConfirming = false
-  if self.confirmationOverlay then
-    self.confirmationOverlay:destroy()
-    self.confirmationOverlay = nil
-  end
-end
-
-function modsManagerScene:cancelAction()
-  self.isConfirming = false
-  if self.confirmationOverlay then
-    self.confirmationOverlay:destroy()
-    self.confirmationOverlay = nil
-  end
-end
-
 function modsManagerScene:enter(previous, ...)
-  local w, h = love.graphics.getDimensions()
-  FlexLove.init({
-    theme = "metal",
-    immediateMode = false,
-    autoFrameManagement = true,
-    baseScale = { width = w, height = h }
-  })
-
   self.pressedKeys = {}
   modSystem.scan()
-  self:createUI()
 
-  -- Set initial selected index to the first mod or first button
+  -- Set initial selection if not set
   local mods = modSystem.getMods()
   local modNames = {}
   for modName in pairs(mods) do
@@ -497,34 +436,29 @@ function modsManagerScene:enter(previous, ...)
   end
   table.sort(modNames)
 
-  if #modNames > 0 then
-    self.selectedIndex = modNames[1]
-  else
-    self.selectedIndex = "back"
+  if not self.selectedMod and #modNames > 0 then
+    -- Prefer core if it exists, otherwise use the first one
+    local hasCore = false
+    for _, name in ipairs(modNames) do
+      if name == "core" then
+        hasCore = true
+        break
+      end
+    end
+    self.selectedMod = hasCore and "core" or modNames[1]
   end
 
-  self.isConfirming = false
+  self.selectedIndex = self.selectedMod or "back"
+  self:createUI()
 end
 
 function modsManagerScene:leave(next, ...)
   FlexLove.destroy()
   self.rootElement = nil
-  self.confirmationOverlay = nil
 end
 
 function modsManagerScene:update(dt)
   FlexLove.update(dt)
-
-  if self.isConfirming then
-    self.confirmationTimer = self.confirmationTimer - dt
-    if self.elements.timerText then
-      self.elements.timerText.text = string.format("Action will be executed in %d seconds...", math.ceil(self.confirmationTimer))
-    end
-
-    if self.confirmationTimer <= 0 then
-      self:confirmAction()
-    end
-  end
 end
 
 function modsManagerScene:draw()
@@ -534,23 +468,6 @@ end
 function modsManagerScene:keypressed(key)
   if not self.pressedKeys[key] then
     self.pressedKeys[key] = true
-    if self.isConfirming then
-      if key == "left" or key == "up" then
-        self.modalIndex = 1
-      elseif key == "right" or key == "down" then
-        self.modalIndex = 2
-      elseif key == "return" or key == "space" then
-        if self.modalIndex == 1 then
-          self:confirmAction()
-        else
-          self:cancelAction()
-        end
-      elseif key == "escape" then
-        self:cancelAction()
-      end
-      self:updateButtonStates()
-      return
-    end
 
     local mods = modSystem.getMods()
     local modNames = {}
@@ -559,16 +476,13 @@ function modsManagerScene:keypressed(key)
     end
     table.sort(modNames)
 
-    local buttonNames = { "enable", "disable", "load", "unload", "back" }
     local navigationList = {}
     for _, name in ipairs(modNames) do
       table.insert(navigationList, name)
     end
-    for _, name in ipairs(buttonNames) do
-      table.insert(navigationList, name)
-    end
+    table.insert(navigationList, "back")
 
-    local currentIndex = 1
+    local currentIndex = 0
     for i, name in ipairs(navigationList) do
       if name == self.selectedIndex then
         currentIndex = i
@@ -576,41 +490,41 @@ function modsManagerScene:keypressed(key)
       end
     end
 
-    if key == "up" then
-      currentIndex = currentIndex - 1
-      if currentIndex < 1 then
-        currentIndex = #navigationList
-      end
-      self.selectedIndex = navigationList[currentIndex]
-    elseif key == "down" then
+    if key == "down" then
       currentIndex = currentIndex + 1
-      if currentIndex > #navigationList then
-        currentIndex = 1
-      end
+      if currentIndex > #navigationList then currentIndex = 1 end
       self.selectedIndex = navigationList[currentIndex]
+      self:updateButtonStates()
+    elseif key == "up" then
+      currentIndex = currentIndex - 1
+      if currentIndex < 1 then currentIndex = #navigationList end
+      self.selectedIndex = navigationList[currentIndex]
+      self:updateButtonStates()
     elseif key == "return" or key == "space" then
-      if self.selectedIndex == "enable" then
-        self:enableMod()
-      elseif self.selectedIndex == "disable" then
-        self:disableMod()
-      elseif self.selectedIndex == "load" then
-        self:loadMod()
-      elseif self.selectedIndex == "unload" then
-        self:unloadMod()
-      elseif self.selectedIndex == "back" then
-        local menu = modSystem.getScene("main_menu")
-        if menu then
-          manager:enter(menu)
+        if self.selectedIndex == "back" then
+          local menu = modSystem.getScene("main_menu")
+          if menu then
+            manager:enter(menu)
+          end
+        elseif self.selectedIndex then
+          -- If it's a mod name, select it
+          local mods = modSystem.getMods()
+          if mods[self.selectedIndex] then
+            -- If already selected, toggle it. If not, select it.
+            if self.selectedMod == self.selectedIndex then
+              self:toggleMod()
+            else
+              self.selectedMod = self.selectedIndex
+              self:rebuildUI()
+            end
+          end
         end
-      end
     elseif key == "escape" then
       local menu = modSystem.getScene("main_menu")
       if menu then
         manager:enter(menu)
       end
     end
-
-    self:updateButtonStates()
   end
 end
 

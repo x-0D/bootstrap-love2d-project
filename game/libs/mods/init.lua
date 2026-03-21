@@ -2,18 +2,19 @@ local concord = require("libs.concord")
 local modSystem = {
   scenes = {},
   globalWorld = nil,
-  modLoader = require("mods.mod_loader")
+  modLoader = require("libs.mods.mod_loader")
 }
 
 function modSystem.initialize()
   -- Create global ECS world
   modSystem.globalWorld = concord.world()
-  
+
   -- Scan for mods
-  modSystem.modLoader.scanMods()
-  
-  -- Load core mod first
-  local core = modSystem.modLoader.loadMod("core")
+  modSystem.scan()
+
+  -- 1. Ensure Core mod is loaded
+  local core = modSystem.loadMod("core")
+
   if core then
     if core.init then
       core.init(modSystem)
@@ -21,10 +22,10 @@ function modSystem.initialize()
       print("[ModSystem] Warning: Core mod has no init function!")
     end
   else
-    print("[ModSystem] Error: Failed to load Core mod!")
+    print("[ModSystem] Error: CRITICAL - Core mod not found. Game functionality may be limited.")
   end
-  
-  -- Load other enabled mods
+
+  -- 2. Load other enabled mods
   local mods = modSystem.getMods()
   for name, info in pairs(mods) do
     if name ~= "core" and info.enabled then
@@ -33,6 +34,11 @@ function modSystem.initialize()
         modModule.init(modSystem)
       end
     end
+  end
+
+  -- 3. Sanity check: ensure at least one scene is registered
+  if next(modSystem.scenes) == nil then
+    print("[ModSystem] Warning: No scenes registered! Mods might not have initialized correctly.")
   end
 end
 
