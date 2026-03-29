@@ -6,6 +6,11 @@ local M = {}
 function M.init(modSystem)
   print("[MMRecolor] Hooking into main_menu...")
 
+  -- Load i18n
+  if love.filesystem.getInfo("mods/mmrecolor/i18n") then
+    modSystem.i18n.load("mods/mmrecolor/i18n")
+  end
+
   local mainMenu = modSystem.getScene("main_menu")
   if not mainMenu then
     print("[MMRecolor] Error: main_menu scene not found!")
@@ -18,7 +23,7 @@ function M.init(modSystem)
   mainMenu.COLORS.PRESSED = Color.new(0.2, 0.6, 0.2, 1)  -- Dark Green
 
   -- Add a custom menu option
-  table.insert(mainMenu.menuOptions, 1, { label = "MODDED START", action = "modded_start" })
+  table.insert(mainMenu.menuOptions, 1, { key = "modded_start", label = "MODDED START", action = "modded_start" })
 
   -- Modify title and layout (this will be used in enter())
   local originalEnter = mainMenu.enter

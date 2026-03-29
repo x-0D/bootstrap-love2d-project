@@ -4,33 +4,21 @@ local concord = require("libs.concord")
 -- Load Components and Systems
 local CameraComponent = require("mods.beecarbonize.component.Camera")
 local CanvasLayerComponent = require("mods.beecarbonize.component.CanvasLayer")
+local ResourcesComponent = require("mods.beecarbonize.component.Resources")
+local CardComponent = require("mods.beecarbonize.component.Card")
+local SectorComponent = require("mods.beecarbonize.component.Sector")
+local GameStateComponent = require("mods.beecarbonize.component.GameState")
+
 local PanCameraSystem = require("mods.beecarbonize.system.PanCameraSystem")
 local CanvasLayerSystem = require("mods.beecarbonize.system.CanvasLayerSystem")
+local ResourceSystem = require("mods.beecarbonize.system.ResourceSystem")
+local CardSystem = require("mods.beecarbonize.system.CardSystem")
+local EventSystem = require("mods.beecarbonize.system.EventSystem")
+local BoardSystem = require("mods.beecarbonize.system.BoardSystem")
+local UISystem = require("mods.beecarbonize.system.UISystem")
+local DragSystem = require("mods.beecarbonize.system.DragSystem")
 
 local BeeCarbonizeSystem = concord.system({})
-
--- Local State (for helper functions)
-local lastW, lastH
-local TILT_FACTOR = 0.2
-
--- Helpers
-local function screenToTable(x, y, cam)
-  local w, h = love.graphics.getDimensions()
-  local tx = x / w
-  local ty = y / h
-
-  local scale = 1.0 - TILT_FACTOR * ty
-  local px_norm = (tx - 0.5) / scale + 0.5
-  local py_norm = ty
-
-  local px = px_norm * w
-  local py = py_norm * h
-
-  local cx, cy = w / 2, h / 2
-  local z_cam = cam.zoom
-  local depth_x, depth_y = 12, 6
-  return cx + (px - cx - cam.x - depth_x) / z_cam, cy + (py - cy - cam.y - depth_y) / z_cam
-end
 
 -- System Callbacks
 function BeeCarbonizeSystem:init()
@@ -42,7 +30,16 @@ function BeeCarbonizeSystem:init()
 
   -- Initialize World
   local world = self:getWorld()
-  world:addSystems(PanCameraSystem, CanvasLayerSystem)
+  world:addSystems(
+    DragSystem,
+    PanCameraSystem,
+    CanvasLayerSystem,
+    ResourceSystem,
+    CardSystem,
+    EventSystem,
+    BoardSystem,
+    UISystem
+  )
 end
 
 function BeeCarbonizeSystem:update(dt)
@@ -50,7 +47,7 @@ function BeeCarbonizeSystem:update(dt)
 end
 
 function BeeCarbonizeSystem:draw()
-  -- The world will draw CanvasLayerSystem
+  -- The world will draw CanvasLayerSystem and UISystem
 end
 
 function BeeCarbonizeSystem:leave()

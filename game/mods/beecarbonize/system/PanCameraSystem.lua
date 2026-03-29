@@ -1,7 +1,8 @@
 local concord = require("libs.concord")
 
 local PanCameraSystem = concord.system({
-  cameras = { "beecarbonize.camera" }
+  cameras = { "beecarbonize.camera" },
+  gameState = { "beecarbonize.game_state" }
 })
 
 local function clamp(v, minv, maxv)
@@ -11,12 +12,8 @@ local function clamp(v, minv, maxv)
 end
 
 local function set_target(cam, x, y, lastW, lastH)
-  local cx, cy = (lastW or 800) / 2, (lastH or 600) / 2
-  local depth_x, depth_y = 12, 6 -- Assuming constant for now, could be component-based
-  local min_x = -cx * cam.target_zoom - depth_x
-  local max_x = cx * cam.target_zoom - depth_x
-  local min_y = -cy * cam.target_zoom - depth_y
-  local max_y = cy * cam.target_zoom - depth_y
+  local min_x, max_x = cam.bounds.min_x, cam.bounds.max_x
+  local min_y, max_y = cam.bounds.min_y, cam.bounds.max_y
 
   cam.target_x = clamp(x, min_x, max_x)
   cam.target_y = clamp(y, min_y, max_y)
@@ -32,16 +29,16 @@ function PanCameraSystem:update(dt)
 
     -- Input
     if love.keyboard.isDown("left") or love.keyboard.isDown("a") then
-      set_target(cam, cam.target_x + speed, cam.target_y, w, h)
+      set_target(cam, cam.target_x - speed / cam.zoom, cam.target_y, w, h)
     end
     if love.keyboard.isDown("right") or love.keyboard.isDown("d") then
-      set_target(cam, cam.target_x - speed, cam.target_y, w, h)
+      set_target(cam, cam.target_x + speed / cam.zoom, cam.target_y, w, h)
     end
     if love.keyboard.isDown("up") or love.keyboard.isDown("w") then
-      set_target(cam, cam.target_x, cam.target_y + speed, w, h)
+      set_target(cam, cam.target_x, cam.target_y - speed / cam.zoom, w, h)
     end
     if love.keyboard.isDown("down") or love.keyboard.isDown("s") then
-      set_target(cam, cam.target_x, cam.target_y - speed, w, h)
+      set_target(cam, cam.target_x, cam.target_y + speed / cam.zoom, w, h)
     end
     if love.keyboard.isDown("=") or love.keyboard.isDown("+") or love.keyboard.isDown("e") then
       cam.target_zoom = clamp(cam.target_zoom + 0.02, cam.bounds.min_zoom, cam.bounds.max_zoom)
@@ -53,7 +50,11 @@ function PanCameraSystem:update(dt)
     end
 
     -- Mouse Drag
-    if love.mouse.isDown(1) then
+    local gsEntity = self.gameState[1]
+    local gs = gsEntity and gsEntity:get("beecarbonize.game_state")
+    local dragActive = gs and (gs.drag.active or gs.drag.pending_entity ~= nil)
+
+    if love.mouse.isDown(1) and not dragActive then
       local mx, my = love.mouse.getPosition()
       if not cam.is_dragging then
         cam.is_dragging = true
@@ -64,7 +65,7 @@ function PanCameraSystem:update(dt)
       else
         local dx = mx - cam.drag_start_x
         local dy = my - cam.drag_start_y
-        set_target(cam, cam.drag_camera_start_x + dx, cam.drag_camera_start_y + dy, w, h)
+        set_target(cam, cam.drag_camera_start_x - dx / cam.zoom, cam.drag_camera_start_y - dy / cam.zoom, w, h)
       end
     else
       cam.is_dragging = false

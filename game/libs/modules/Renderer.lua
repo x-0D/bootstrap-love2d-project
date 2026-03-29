@@ -430,12 +430,6 @@ function Renderer:draw(element, backdropCanvas)
   local borderBoxWidth = element._borderBoxWidth or (element.width + element.padding.left + element.padding.right)
   local borderBoxHeight = element._borderBoxHeight or (element.height + element.padding.top + element.padding.bottom)
 
-  -- Apply transform if exists
-  local hasTransform = element.transform and self._Transform and not self._Transform.isIdentity(element.transform)
-  if hasTransform then
-    self._Transform.apply(element.transform, element.x, element.y, element.width, element.height)
-  end
-
   -- LAYER 0.5: Draw backdrop blur if configured (before background)
   if self.backdropBlur and self.backdropBlur.radius > 0 and backdropCanvas then
     local blurInstance = self:getBlurInstance()
@@ -457,11 +451,6 @@ function Renderer:draw(element, backdropCanvas)
 
   -- LAYER 3: Draw borders on top of theme
   self:_drawBorders(element.x, element.y, borderBoxWidth, borderBoxHeight)
-
-  -- Unapply transform if it was applied
-  if hasTransform then
-    self._Transform.unapply()
-  end
 
   -- Stop performance timing
   if Renderer._Performance and Renderer._Performance.enabled and elementId then

@@ -17,6 +17,10 @@ local function loadAndApplySettings()
           love.audio.setVolume(settings.master_vol / 100)
         end
       end
+      if settings and settings.language then
+        print("Restoring Language: " .. settings.language)
+        modSystem.i18n.setLocale(settings.language)
+      end
     end
   end
 end

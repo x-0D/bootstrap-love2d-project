@@ -1,5 +1,4 @@
 local concord = require("libs.concord")
-local FlexLove = require("libs.FlexLove")
 
 local M = {}
 
@@ -10,33 +9,77 @@ M.system = {
 }
 M.entity = {}
 
-local TILT_FACTOR = 0.2
-local function screenToTable(x, y, cam)
-  local w, h = love.graphics.getDimensions()
-  local tx = x / w
-  local ty = y / h
-  local scale = 1.0 - TILT_FACTOR * ty
-  local px_norm = (tx - 0.5) / scale + 0.5
-  local py_norm = ty
-  local px = px_norm * w
-  local py = py_norm * h
-  local cx, cy = w / 2, h / 2
-  local z_cam = cam.zoom
-  local depth_x, depth_y = 12, 6
-  return cx + (px - cx - cam.x - depth_x) / z_cam, cy + (py - cy - cam.y - depth_y) / z_cam
-end
 
 function M.main(world)
   print("[BeeCarbonize] Initializing ECS...")
 
+  -- Initialize i18n
+  modSystem.i18n.configure({
+    fallbackLocale = "en",
+    currentLocale = "en"
+  })
+
   -- Ensure components are loaded
   require("mods.beecarbonize.component.Camera")
   require("mods.beecarbonize.component.CanvasLayer")
+  require("mods.beecarbonize.component.Resources")
+  require("mods.beecarbonize.component.Card")
+  require("mods.beecarbonize.component.Sector")
+  require("mods.beecarbonize.component.GameState")
 
   -- Register systems
   world:addSystem(M.system.BeeCarbonizeSystem)
 
+  -- Create Game State Entity
+  local gameState = concord.entity(world)
+  gameState:give("beecarbonize.game_state", {
+    round = 1,
+    time = 0,
+    event_pool = {},
+    waiting_for_event_pool = {}
+  })
+  M.entity.gameState = gameState
+
+  -- Create Resources Entity
+  local startingResources = { production = 0, people = 0, science = 0 }
+  local maxEmissions = 3000
+
+  local cardSet = modSystem.getEnabledModByType("card_set")
+  local cardSetInfo = modSystem.getEnabledModInfoByType("card_set")
+
+  if cardSet and cardSetInfo then
+    print(string.format("[BeeCarbonize] Using card set: %s (%s)", cardSetInfo.title or cardSetInfo.name, cardSetInfo.name))
+    -- Load translations from card set
+    if love.filesystem.getInfo(cardSetInfo.path .. "/i18n") then
+      modSystem.i18n.load(cardSetInfo.path .. "/i18n")
+    end
+
+    if cardSet.sectors and cardSet.sectors.init then
+      local initData = cardSet.sectors.init
+      if initData.StartingResources then
+        startingResources.production = initData.StartingResources.Production or 0
+        startingResources.people = initData.StartingResources.People or 0
+        startingResources.science = initData.StartingResources.Science or 0
+      end
+      maxEmissions = initData.MaxEmissions or 3000
+    end
+  else
+    print("[BeeCarbonize] Warning: No enabled card set found!")
+  end
+
+  local resources = concord.entity(world)
+  resources:give("beecarbonize.resources", {
+    production = startingResources.production,
+    people = startingResources.people,
+    science = startingResources.science,
+    emissions = 0,
+    max_emissions = maxEmissions
+  })
+  M.entity.resources = resources
+
   -- Create Camera Entity
+  local w, h = love.graphics.getDimensions()
+  local cx, cy = w / 2, h / 2
   local cameraEntity = concord.entity(world)
   cameraEntity:give("beecarbonize.camera", {
     x = 0, y = 0,
@@ -44,9 +87,59 @@ function M.main(world)
     zoom = 1.0, target_zoom = 1.0,
     smoothing = 0.2,
     zoom_smoothing = 0.2,
-    bounds = { min_x = -math.huge, max_x = math.huge, min_y = -math.huge, max_y = math.huge, min_zoom = 0.5, max_zoom = 2.0 }
+    bounds = { 
+      min_x = -cx, max_x = cx, 
+      min_y = -cy, max_y = cy, 
+      min_zoom = 0.5, max_zoom = 2.0 
+    }
   })
   M.entity.camera = cameraEntity
+
+  -- Create Sectors and Starting Cards
+  if cardSet and cardSet.sectors then
+    for key, sData in pairs(cardSet.sectors) do
+      -- Skip non-sector metadata
+      if key ~= "init" and key ~= "card_manager" and type(sData) == "table" then
+        local sectorEntity = concord.entity(world)
+        sectorEntity:give("beecarbonize.sector", {
+          type = key,
+          name = sData.m_Name or key,
+          cards = {}
+        })
+
+        -- Add starting card
+        local startCardId = sData.StartingCard
+        if startCardId then
+          local cardData
+          -- Search for card in all categories
+          local categories = {key, "ecosystem", "industry", "people", "science", "social"}
+          for _, cat in ipairs(categories) do
+            if cardSet[cat] and cardSet[cat][startCardId] then
+              cardData = cardSet[cat][startCardId]
+              break
+            end
+          end
+
+          if cardData then
+            local cardEntity = concord.entity(world)
+            cardEntity:give("beecarbonize.card", {
+              data = cardData,
+              status = "idle",
+              is_active = true
+            })
+            local sector = sectorEntity:get("beecarbonize.sector")
+            -- Find first empty slot
+            for i = 1, 8 do
+              if not sector.cards[i] then
+                sector.cards[i] = cardEntity
+                break
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 
   -- Create Background Layer Entity
   local bgLayer = concord.entity(world)
@@ -61,19 +154,11 @@ function M.main(world)
       love.graphics.clear(0.5, 0.5, 0.5, 1)
       love.graphics.setColor(0.4, 0.4, 0.45, 1)
       love.graphics.rectangle("fill", 0, 0, w, h)
-      FlexLove.beginFrame()
-      FlexLove.new({
-        text = string.format("BG canvas • cam=(%.1f,%.1f) zoom=%.2f", cam.x, cam.y, cam.zoom),
-        x = 8, y = 8,
-        textColor = FlexLove.Color.new(1, 1, 1, 1)
-      })
-      FlexLove.endFrame()
-      FlexLove.draw()
     end
   })
   M.entity.bgLayer = bgLayer
 
-  -- Create Table Layer Entity
+  -- Create Table Layer Entity (Sectors and Cards)
   local tableLayer = concord.entity(world)
   tableLayer:give("beecarbonize.canvas_layer", {
     name = "Table",
@@ -82,59 +167,31 @@ function M.main(world)
     depth = { x = 12, y = 6 },
     use_shader = true,
     draw = function(e)
-      local cam = M.entity.camera["beecarbonize.camera"]
-      local w, h = love.graphics.getDimensions()
-      local origGetPos = love.mouse.getPosition
-      love.mouse.getPosition = function()
-        local x, y = origGetPos()
-        return screenToTable(x, y, cam)
+      local world = e:getWorld()
+      local uiSystem = world:getSystem(require("mods.beecarbonize.system.UISystem"))
+      if uiSystem then
+        uiSystem:drawBoard()
       end
-      FlexLove.beginFrame()
-      local root = FlexLove.new({
-        width = "100%", height = "100%", positioning = "flex",
-        flexDirection = "column", justifyContent = "center", alignItems = "center"
-      })
-      FlexLove.new({ parent = root, text = "BeeCarbonize", textSize = "xl", themeComponent = "buttonv1" })
-      FlexLove.new({ parent = root, width = 320, height = 200, themeComponent = "framev1", backgroundColor = FlexLove.Color.new(0.2, 0.2, 0.25, 0.6) })
-      FlexLove.new({ text = string.format("TABLE canvas • cam=(%.1f,%.1f) depth=(12,6) zoom=%.2f", cam.x, cam.y, cam.zoom), x = 8, y = 28, textColor = FlexLove.Color.new(1, 1, 1, 1) })
-      FlexLove.endFrame()
-      FlexLove.draw()
-      love.mouse.getPosition = origGetPos
     end
   })
   M.entity.tableLayer = tableLayer
 
-  -- Create HUD Layer Entity
+  -- Create HUD Layer Entity (HUD and Overlays)
   local hudLayer = concord.entity(world)
   hudLayer:give("beecarbonize.canvas_layer", {
     name = "HUD",
-    priority = 30,
+    priority = 100,
     is_camera_applied = false,
+    use_shader = false,
     draw = function(e)
-      FlexLove.beginFrame()
-      local hudRoot = FlexLove.new({ padding = 10, gap = 5, themeComponent = "framev2", backgroundColor = FlexLove.Color.new(0, 0, 0, 0.5) })
-      FlexLove.new({ parent = hudRoot, text = "HUD • Left-click drag or WASD/Arrows to pan • Wheel or +/- to zoom", textColor = FlexLove.Color.new(1, 1, 1, 1) })
-      FlexLove.new({ parent = hudRoot, text = "Press ESC to return to main menu", textColor = FlexLove.Color.new(0.7, 0.7, 0.7, 1) })
-      FlexLove.new({ parent = hudRoot, text = "HUD canvas (static)", textColor = FlexLove.Color.new(1, 1, 1, 1) })
-      FlexLove.endFrame()
-      FlexLove.draw()
+      local world = e:getWorld()
+      local uiSystem = world:getSystem(require("mods.beecarbonize.system.UISystem"))
+      if uiSystem then
+        uiSystem:drawHUD()
+      end
     end
   })
   M.entity.hudLayer = hudLayer
-
-  -- Create Composite Overlay Layer Entity
-  local compositeOverlay = concord.entity(world)
-  compositeOverlay:give("beecarbonize.canvas_layer", {
-    name = "CompositeOverlay",
-    priority = 40,
-    is_camera_applied = false,
-    draw = function(e)
-      FlexLove.draw(function()
-        FlexLove.new({ text = "FINAL composite", x = 10, y = 50, textColor = FlexLove.Color.new(1, 1, 1, 1) })
-      end)
-    end
-  })
-  M.entity.compositeOverlay = compositeOverlay
 end
 
 return M

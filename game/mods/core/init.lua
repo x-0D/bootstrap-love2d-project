@@ -3,6 +3,11 @@ local M = {}
 function M.init(modSystem)
   print("[Core] Initializing Core Mod...")
 
+  -- Initialize i18n
+  if love.filesystem.getInfo("mods/core/i18n") then
+    modSystem.i18n.load("mods/core/i18n")
+  end
+
   -- Add global systems
   local GlobalInputSystem = require("mods.core.system.GlobalInputSystem")
   modSystem.globalWorld:addSystem(GlobalInputSystem)

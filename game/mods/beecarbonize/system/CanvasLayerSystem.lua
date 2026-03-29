@@ -1,5 +1,4 @@
 local concord = require("libs.concord")
-local FlexLove = require("libs.FlexLove")
 
 local CanvasLayerSystem = concord.system({
   layers = { "beecarbonize.canvas_layer" },
@@ -10,6 +9,7 @@ local perspectiveCode = [[
   extern float fov, y_rot, x_rot, inset, zoom;
   extern bool cull_back;
   extern vec2 u_texture_size;
+  extern bool u_picking;
 
   varying vec2 v_o;
   varying vec3 v_p;
@@ -43,8 +43,14 @@ local perspectiveCode = [[
   vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
     if (cull_back && v_p.z <= 0.0) discard;
     vec2 uv = (v_p.xy / v_p.z - v_o) / zoom + 0.5;
+
+    if (u_picking) {
+      return vec4(uv, 0.0, 1.0);
+    }
+
     vec4 tex_color = Texel(tex, uv);
     tex_color.a *= step(max(abs(uv.x - 0.5), abs(uv.y - 0.5)), 0.5);
+
     return tex_color * color;
   }
   #endif
@@ -56,8 +62,6 @@ function CanvasLayerSystem:init()
   local y_rot = 0.0
 
   -- Calculate zoom to fill screen edges
-  -- zoom = 1 + sin(angle) * tan(fov/2)
-  -- added a small safety margin (1.05x) to ensure no gaps at the edges
   local t = math.tan(math.rad(fov / 2))
   local zoom = (1.02 + (math.sin(math.abs(math.rad(x_rot))) + math.sin(math.abs(math.rad(y_rot)))) * t)
 
@@ -68,10 +72,68 @@ function CanvasLayerSystem:init()
   self.perspectiveShader:send("inset", 0.0)
   self.perspectiveShader:send("zoom", zoom)
   self.perspectiveShader:send("cull_back", true)
+  self.perspectiveShader:send("u_picking", false)
+
+  self.pickingCanvas = love.graphics.newCanvas(1, 1, {format = "rgba32f"})
+  self.pickingImageData = love.image.newImageData(1, 1, "rgba32f")
   self.finalCanvas = nil
   self.lastW = 0
   self.lastH = 0
   self.sortedLayers = {}
+
+  -- Performance Caching
+  self.lastMx, self.lastMy = -1, -1
+  self.cachedWx, self.cachedWy = -1, -1
+  self.lastFrame = 0
+end
+
+function CanvasLayerSystem:warpMouse(mx, my)
+  local targetLayer = nil
+  for _, e in ipairs(self.sortedLayers) do
+    local l = e:get("beecarbonize.canvas_layer")
+    if l.use_shader and l.canvas then
+      targetLayer = l
+      break
+    end
+  end
+
+  if not targetLayer then return mx, my end
+
+  local cw, ch = targetLayer.canvas:getDimensions()
+
+  -- Store current state
+  local prevCanvas = love.graphics.getCanvas()
+
+  -- 1x1 Readback
+  love.graphics.setCanvas(self.pickingCanvas)
+  love.graphics.clear(0, 0, 0, 0)
+
+  love.graphics.push("all")
+  love.graphics.origin()
+  love.graphics.translate(-mx, -my)
+
+  self.perspectiveShader:send("u_texture_size", {cw, ch})
+  self.perspectiveShader:send("u_picking", true)
+  love.graphics.setShader(self.perspectiveShader)
+
+  -- Draw the target layer's canvas
+  love.graphics.draw(targetLayer.canvas)
+
+  love.graphics.setShader()
+  love.graphics.pop()
+
+  -- Restore state
+  love.graphics.setCanvas(prevCanvas)
+
+  -- Use Canvas:newImageData to get the current pixel data
+  local imageData = self.pickingCanvas:newImageData()
+  local r, g, b, a = imageData:getPixel(0, 0)
+
+  if a == 0 then
+    return -1000, -1000
+  end
+
+  return r * cw, g * ch
 end
 
 function CanvasLayerSystem:ensureCanvases()
@@ -89,6 +151,7 @@ function CanvasLayerSystem:ensureCanvases()
 end
 
 function CanvasLayerSystem:update(dt)
+  self.lastFrame = self.lastFrame + 1
   self:ensureCanvases()
   -- Sort layers by priority
   self.sortedLayers = {}
@@ -101,6 +164,21 @@ function CanvasLayerSystem:update(dt)
     local lb = b["beecarbonize.canvas_layer"]
     return la.priority < lb.priority
   end)
+end
+
+function CanvasLayerSystem:getWarpedMouse(mx, my)
+  if not mx or not my then
+    mx, my = love.mouse.getPosition()
+  end
+
+  if mx == self.lastMx and my == self.lastMy and self.lastWarpFrame == self.lastFrame then
+    return self.cachedWx, self.cachedWy
+  end
+
+  self.cachedWx, self.cachedWy = self:warpMouse(mx, my)
+  self.lastMx, self.lastMy = mx, my
+  self.lastWarpFrame = self.lastFrame
+  return self.cachedWx, self.cachedWy
 end
 
 function CanvasLayerSystem:draw()
@@ -123,9 +201,9 @@ function CanvasLayerSystem:draw()
 
     if l.is_camera_applied and cam then
       love.graphics.push()
-      love.graphics.translate(cam.x + l.depth.x + cx, cam.y + l.depth.y + cy)
+      love.graphics.translate(cx, cy)
       love.graphics.scale(cam.zoom)
-      love.graphics.translate(-cx, -cy)
+      love.graphics.translate(-cx - cam.x - l.depth.x, -cy - cam.y - l.depth.y)
     end
 
     if type(l.draw) == "function" then
@@ -149,6 +227,7 @@ function CanvasLayerSystem:draw()
       if l.use_shader then
         local cw, ch = l.canvas:getDimensions()
         self.perspectiveShader:send("u_texture_size", {cw, ch})
+        self.perspectiveShader:send("u_picking", false) -- ENSURE NO PICKING
         love.graphics.setShader(self.perspectiveShader)
       end
       love.graphics.draw(l.canvas)

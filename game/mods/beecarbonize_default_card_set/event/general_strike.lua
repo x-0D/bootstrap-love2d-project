@@ -1,0 +1,65 @@
+return {
+  m_Name = "event_1021",
+  Id = 1021,
+  NameLocKey = "events/general_strike",
+  EventSubsector = 1,
+  Rarity = 1,
+  Duration = 60,
+  Repetition = 0,
+  EffectsEveryRound = {
+    Type = 2,
+    TargetResource = {
+      Production = 1,
+      People = 1,
+      Science = 0
+    },
+    TargetCardID = nil,
+    Amount = 0
+  },
+  EffectAfterDuration = {
+    Type = 0,
+    TargetResource = {
+      Production = 0,
+      People = 0,
+      Science = 0
+    },
+    TargetCardID = nil,
+    Amount = 0
+  },
+  EffectAfterSolved = {
+    Type = 4,
+    TargetResource = {
+      Production = 0,
+      People = 0,
+      Science = 0
+    },
+    TargetCardID = "transition_from_fossils",
+    Amount = 0
+  },
+  EffectInsolvency = {
+    Type = 0,
+    TargetResource = {
+      Production = 0,
+      People = 0,
+      Science = 0
+    },
+    TargetCardID = nil,
+    Amount = 0
+  },
+  EventSolutions = {
+    Production = 6,
+    People = 6,
+    Science = 0
+  },
+  EmissionThreshold = 0,
+  EmissionsMin = 0,
+  EmissionsMax = 999999,
+  FlavourText = nil,
+  InitialChance = 0,
+  ChanceStartSeason = 0,
+  Repeatable = 0,
+  Sprite = {
+    fileID = 0
+  },
+  ScriptFile = "EventCardSO.cs"
+}

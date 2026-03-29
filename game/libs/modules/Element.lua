@@ -2657,6 +2657,12 @@ function Element:draw(backdropCanvas)
   local borderBoxWidth = self._borderBoxWidth or (self.width + self.padding.left + self.padding.right)
   local borderBoxHeight = self._borderBoxHeight or (self.height + self.padding.top + self.padding.bottom)
 
+  -- Apply transform if exists (affects element and ALL its children)
+  local hasTransform = self.transform and Element._Transform and not Element._Transform.isIdentity(self.transform)
+  if hasTransform then
+    Element._Transform.apply(self.transform, self.x, self.y, self.width, self.height)
+  end
+
   -- LAYERS 0.5-3: Delegate visual rendering (backdrop blur, background, image, theme, borders) to Renderer module
   self._renderer:draw(self, backdropCanvas)
 
@@ -2805,6 +2811,11 @@ function Element:draw(backdropCanvas)
     end
   else
     drawChildren()
+  end
+
+  -- Unapply transform if it was applied
+  if hasTransform then
+    Element._Transform.unapply()
   end
 
   -- Draw scrollbars if overflow is scroll or auto

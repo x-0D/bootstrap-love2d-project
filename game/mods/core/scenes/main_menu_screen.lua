@@ -13,11 +13,11 @@ local mainMenu = {
     PRESSED = Color.new(0.6, 0.7, 0.8, 1)
   },
   menuOptions = {
-    { label = "Start Game", action = "start" },
-    { label = "Mods Manager", action = "mods" },
-    { label = "Credits", action = "credits" },
-    { label = "Settings", action = "settings" },
-    { label = "Quit", action = "quit" }
+    { key = "start", label = "Start Game", action = "start" },
+    { key = "mods", label = "Mods Manager", action = "mods" },
+    { key = "credits", label = "Credits", action = "credits" },
+    { key = "settings", label = "Settings", action = "settings" },
+    { key = "quit", label = "Quit", action = "quit" }
   }
 }
 
@@ -116,7 +116,7 @@ function mainMenu:enter()
       margin = { left = "5%" },
       height = 50,
       themeComponent = "buttonv2",
-      text = option.label,
+      text = option.key and modSystem.i18n.t("menu/option/" .. option.key, nil, nil, option.label) or option.label,
       textSize = "xl",
       textColor = self.COLORS.NORMAL,
       onEvent = function(elem, event)

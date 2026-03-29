@@ -7,7 +7,8 @@ local modsManagerScene = {
   isPressed = false,
   pressedKeys = {},
   elements = {},
-  rootElement = nil
+  rootElement = nil,
+  needsReload = false
 }
 
 local COLORS = {
@@ -97,7 +98,7 @@ function modsManagerScene:createUI()
     height = 60,
     backgroundColor = Color.new(0.15, 0.15, 0.25, 1),
     borderRadius = 10,
-    text = "Mods Manager",
+    text = modSystem.i18n.t("mods/manager/title", nil, nil, "Mods Manager"),
     textSize = "3xl",
     textColor = COLORS.ACCENT,
     justifyContent = "center",
@@ -241,7 +242,7 @@ function modsManagerScene:createUI()
 
   local descriptionTitle = FlexLove.new({
     parent = headerInfo,
-    text = "Select a mod to see details",
+    text = modSystem.i18n.t("mods/manager/select_prompt", nil, nil, "Select a mod to see details"),
     textSize = "2xl",
     textColor = COLORS.HOVER,
     width = "100%",
@@ -298,7 +299,7 @@ function modsManagerScene:createUI()
     width = 160,
     height = 48,
     themeComponent = "buttonv2",
-    text = "Back",
+    text = modSystem.i18n.t("mods/manager/back", nil, nil, "BACK"),
     textSize = "xl",
     textColor = COLORS.NORMAL,
     onEvent = function(elem, event)
@@ -306,9 +307,13 @@ function modsManagerScene:createUI()
         self.selectedIndex = "back"
         self:updateButtonStates()
       elseif event.type == "release" then
-        local menu = modSystem.getScene("main_menu")
-        if menu then
-          manager:enter(menu)
+        if self.needsReload then
+          modSystem.reload()
+        else
+          local menu = modSystem.getScene("main_menu")
+          if menu then
+            manager:enter(menu)
+          end
         end
       end
     end
@@ -387,6 +392,7 @@ function modsManagerScene:enableMod()
   local success, message = modSystem.setEnabled(modName, true)
   if success then
     print("Mod enabled: " .. modName)
+    self.needsReload = true
     self:rebuildUI()
   else
     print("Failed to enable mod: " .. message)
@@ -400,6 +406,7 @@ function modsManagerScene:disableMod()
   local success, message = modSystem.setEnabled(modName, false)
   if success then
     print("Mod disabled: " .. modName)
+    self.needsReload = true
     self:rebuildUI()
   else
     print("Failed to disable mod: " .. message)
@@ -426,6 +433,7 @@ end
 
 function modsManagerScene:enter(previous, ...)
   self.pressedKeys = {}
+  self.needsReload = false
   modSystem.scan()
 
   -- Set initial selection if not set
@@ -502,9 +510,13 @@ function modsManagerScene:keypressed(key)
       self:updateButtonStates()
     elseif key == "return" or key == "space" then
         if self.selectedIndex == "back" then
-          local menu = modSystem.getScene("main_menu")
-          if menu then
-            manager:enter(menu)
+          if self.needsReload then
+            modSystem.reload()
+          else
+            local menu = modSystem.getScene("main_menu")
+            if menu then
+              manager:enter(menu)
+            end
           end
         elseif self.selectedIndex then
           -- If it's a mod name, select it
@@ -520,9 +532,13 @@ function modsManagerScene:keypressed(key)
           end
         end
     elseif key == "escape" then
-      local menu = modSystem.getScene("main_menu")
-      if menu then
-        manager:enter(menu)
+      if self.needsReload then
+        modSystem.reload()
+      else
+        local menu = modSystem.getScene("main_menu")
+        if menu then
+          manager:enter(menu)
+        end
       end
     end
   end

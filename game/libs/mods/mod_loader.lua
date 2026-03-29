@@ -79,6 +79,12 @@ function modLoader.loadMod(modName)
   if not modInfo then return nil end
   if modInfo.loaded then return modInfo.module end
 
+  -- Only load if enabled, unless it's the core mod
+  if not modInfo.enabled and modName ~= "core" then
+    print(string.format("[ModLoader] Skipping loading disabled mod '%s'", modName))
+    return nil
+  end
+
   local initPath = modInfo.path .. "/init.lua"
   if not isFile(initPath) then return nil end
 
@@ -94,6 +100,31 @@ function modLoader.loadMod(modName)
 
   print(string.format("[ModLoader] Error loading mod '%s': %s", modName, modModule))
   return nil
+end
+
+function modLoader.unloadMod(modName)
+  local modInfo = modLoader.mods[modName]
+  if not modInfo or not modInfo.loaded then return end
+
+  print(string.format("[ModLoader] Unloading mod '%s'...", modName))
+
+  -- Clear all modules belonging to this mod from package.loaded
+  local prefix = "mods." .. modName:gsub("/", ".")
+  local keysToRemove = {}
+  for k, _ in pairs(package.loaded) do
+    if k == prefix or k:sub(1, #prefix + 1) == prefix .. "." then
+      table.insert(keysToRemove, k)
+    end
+  end
+
+  for _, k in ipairs(keysToRemove) do
+    print(string.format("[ModLoader]   - Clearing package.loaded['%s']", k))
+    package.loaded[k] = nil
+  end
+
+  -- Clear mod internal state
+  modInfo.module = nil
+  modInfo.loaded = false
 end
 
 function modLoader.getMods()
